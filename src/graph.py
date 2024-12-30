@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-
 import logging
 
 logger = logging.getLogger()
@@ -147,7 +146,6 @@ class DepGraph():
     def add_dependency(self, parent, child):
         parent.add_dependency(child)
 
-
     def del_dependency(self, parent, child):
         parent.del_dependency(child)
 
@@ -207,13 +205,18 @@ class DepGraph():
         for i, stream in enumerate(reversed(timeline.keys())):
             for stage, nodes in timeline[stream].items():
                 if stage == 'fwd':
+                    # blue colors for forward pass nodes
                     color = ('powderblue', 'lightskyblue', 'dodgerblue')
                 elif stage == 'bwd':
+                    # green colors for backward pass nodes
                     color = ('greenyellow', 'limegreen', 'forestgreen')
                 elif stage == 'wu':
+                    # red colors for opimizer step nodes
                     color = ('lightcoral', 'tab:red')
                 else:
+                    # grey for other nodes
                     color = ('darkgrey')
+
                 ax.broken_barh(nodes, (1+i*5, 4), facecolors=color)
 
         plt.axis('tight')
