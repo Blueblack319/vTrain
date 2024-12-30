@@ -8,7 +8,10 @@ class Node():
     def __init__(self):
         self.parent = []
         self.child = []
+
+        # the number of references of this node
         self.ref = 0
+
         self.note = None
         
     def add_child(self, child):
