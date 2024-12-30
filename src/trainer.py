@@ -110,10 +110,13 @@ class Trainer():
         
 
     def train_step(self, model, inputs, labels, criterion, optimizer, profile=False):
+        # forward pass including loss function
         outputs = model(inputs)
         loss = criterion(outputs, labels)
 
+        # backward pass
         loss.backward()
-
+        
+        # optimizer step
         optimizer.step(profile=profile)
         optimizer.zero_grad()
