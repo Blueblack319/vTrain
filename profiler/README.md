@@ -7,7 +7,7 @@ Traces include 1) CUDA Runtime API calls, 2) CUDA kernels, and 3) memory operati
 There are 5 types of traces, and each trace type is formatted as follows:
 - `RUNTIME`/`DRIVER`
     - `[start time],[duration (ns)],[RUNTIME | DRIVER],[cbid],[process id],[thread id],[correlation id]`
-    - For cudaLaunchKernel API, the trace of the corresponding kernel has the same correlation id.
+    - For `cudaLaunchKernel` API, the trace of the corresponding kernel has the same correlation id.
 - `KERNEL`
     - `[start time],[duration (ns)],KERNEL,[kernel name],[device id],[context id],[stream id],[gridX],[gridY],[gridZ],[blockX],[blockY],[blockZ],[correlation id]`
 - `MEMCPY`/`MEMSET`
