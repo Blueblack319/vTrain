@@ -565,7 +565,6 @@ class vTrain():
     def replace_node(self, old, old_idx, new):
         old_parent = old.parent[:]
         old_child = old.child[:]
-        stream = old.stream
 
         for p in old_parent:
             p.del_dependency(old)
