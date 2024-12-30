@@ -2,7 +2,7 @@
 
 vTrain is a profiling-driven simulator designed to provide AI practitioners a fast yet accurate software framework to determine an efficient and cost-effective LLM training system configuration.
 
-For more details about this work, please refer to [our paper](https://arxiv.org/abs/2312.12391) published in MICRO`24.
+For more details about this work, please refer to [our paper](https://doi.org/10.1109/MICRO61859.2024.00021) published in MICRO`24.
 
 ## Setup
 
