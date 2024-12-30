@@ -11,10 +11,10 @@ class vTrainConfig:
         tensor_parallel_size (int): Tensor parallel size.
         data_parallel_size (int): Data parallel size.
         pipeline_parallel_size (int): Pipeline parallel size.
-        gpu_name (str): Name of the GPU to use
+        gpu_name (str): Name of the GPU to use.
         global_batch_size (int): Global batch size.
         micro_batch_size (int): Micro-batch size.
-        mnodel_arch (str): Name of PyTorch class of the target model architecture
+        mnodel_arch (str): Name of PyTorch class of the target model architecture.
         num_layers (int): Number of transformer layers.
         hidden_size (int): The size of hidden dimension.
         num_attention_heads (int): Number of attention heads.
