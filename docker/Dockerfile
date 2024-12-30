@@ -1,4 +1,5 @@
 # Start with a base image that includes CUDA 11.8
+# Further support for more recent software versions will be provided
 FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 
 # Install dependencies
