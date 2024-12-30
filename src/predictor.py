@@ -1,7 +1,6 @@
 import torch
 
 from .model.gpt_model import ShardedGptModel
-
 from .trainer import Trainer
 from .config import vTrainConfig
 from .graph import CommNode, DepGraph, LayerNode, TaskNode
@@ -166,7 +165,7 @@ class vTrain():
             graph.create_stream(f"GPU{gpu_num}")
         graph.create_stream("Comm")
 
-        # balacne
+        # balance
         balance = [config.num_layers // pp for _ in range(pp)]
         balance[0] += 1     # embedding
         balance[-1] += 1    # logit
