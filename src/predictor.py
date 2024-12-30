@@ -309,6 +309,7 @@ class vTrain():
                 for u in last_nodes:
                     u.add_dependency(node)
 
+        # add dependencies between nodes
         for stream, nodes in graph.streams.items():
             if stream == "Comm":
                 continue
