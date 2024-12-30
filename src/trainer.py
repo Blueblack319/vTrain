@@ -76,7 +76,7 @@ class Trainer():
 
         # warm-up
         model = modify_functions(self.model)
-        num_step = 5
+        num_step = 5    # it can be adjusted
 
         vocab_size = self.model.vocab_size
         inputs = torch.randint(0, vocab_size, (local_batch_size, config.max_length), dtype=int).cuda()
