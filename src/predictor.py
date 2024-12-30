@@ -17,10 +17,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-
-model_names = ['bert', 'gpt']
-
-
 class ParamInfo():
     def __init__(self, elem_num, elem_size=2):
         self.elem_num = elem_num
@@ -75,10 +71,8 @@ class vTrain():
         config = self.config
 
         # create model
-        # self.create_model()
         self.graph = DepGraph()
 
-        # logger.info(f"dp, tp, pp = {config.data_parallel_size}, {config.tensor_parallel_size}, {config.pipeline_parallel_size}")
         logger.info(config)
 
         # create layer graph which contains
@@ -297,7 +291,8 @@ class vTrain():
                 if tp < config.node_size:  # intra-node grad allreduce for dp
                     comm_node.duration = self.compute_comm_time(comm_node.bucket_size, dp)
                 else:
-                    comm_node.duration = comm_node.bucket_size / (config.inter_node_bandwidth * (2 ** 30) / 8) \
+                    comm_node.duration = comm_node.bucket_size \
+                                            / (config.inter_node_bandwidth * (2 ** 30) / 8) \
                                             * (2*(dp-1)/dp) * (10 ** 9)
                 self.graph.add_node(comm_node, prev=last_bwd)
                 self.graph.append_node_to_stream(comm_node, f"GPU{rank}")
@@ -481,8 +476,6 @@ class vTrain():
                     prev_task = func2node[prevFunc][-1]
                     func2node[prevFunc][-1] = prev_task[:-1] + (start - prev_task[-2] - prev_task[0],)
 
-                # duration = int(duration / 2.496)
-                # duration = int(duration * 0.7)
                 nodeInfo = (duration, name, None, cid, start, 0)
 
                 corrFunc = cid2func[cid]
@@ -533,7 +526,7 @@ class vTrain():
 
             for l in lines:
                 info = l.strip().split(',')
-                size = int(info[0])//1024//1024     # megabytes
+                size = int(info[0]) // 1024 // 1024     # megabytes
                 allreduce_LUT[num_gpus][size] = {
                     "time": int(info[-2]),
                     "busbw": float(info[-1])
