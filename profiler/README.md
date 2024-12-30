@@ -18,5 +18,5 @@ To mark certain points to analyse, please use `timestamp(msg)`, which creates a 
 
 ### Consideration
 
-The default buffer size for collecting traces is 32KB.
+This profiler initializes `CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE` and `CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_POOL_LIMIT` to twice their default values.
 If the context size of your ROI exceeds the buffer size, consider increasing the buffer size or periodically invoking `flushTrace()`.
