@@ -4,7 +4,7 @@ import json
 
 class vTrainConfig:
     """
-    Configuration class for the framework.
+    Configuration class for vTrain.
     
     Attributes:
         num_gpus (int): Number of total GPUs.
