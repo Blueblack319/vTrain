@@ -1,4 +1,4 @@
-﻿Parameters (billion),# GPUs,global batch,micro batch,hidden size,attention heads,# layers,sequence length,tensor parallelism,data parallelism,pipeline parallelism,iteration time (ms)
+parameters (billion),# GPUs,global batch,micro batch,hidden size,attention heads,# layers,sequence length,tensor parallelism,data parallelism,pipeline parallelism,iteration time (ms)
 3.6,64,512,8,3072,32,30,2048,1,64,1,3566.5
 3.6,64,512,4,3072,32,30,2048,1,64,1,3638.3
 3.6,64,512,8,3072,32,30,2048,2,32,1,3975.2
