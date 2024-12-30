@@ -90,4 +90,4 @@ This research is funded by the generous support from the following organizations
 
 ## Citation
 
-Jehyeon Bang, Yujeong Choi, Myeongwoo Kim, Yongdeok Kim, and Minsoo Rhu, "[vTrain: A Simulation Framework for Evaluating Cost-effective and Compute-optimal Large Language Model Training](https://arxiv.org/abs/2312.12391)," The 57th IEEE/ACM International Symposium on Microarchitecture (MICRO-57), Austin, TX, Nov. 2024
+Jehyeon Bang, Yujeong Choi, Myeongwoo Kim, Yongdeok Kim, and Minsoo Rhu, "[vTrain: A Simulation Framework for Evaluating Cost-effective and Compute-optimal Large Language Model Training](https://doi.org/10.1109/MICRO61859.2024.00021)," The 57th IEEE/ACM International Symposium on Microarchitecture (MICRO-57), Austin, TX, Nov. 2024
