@@ -74,7 +74,7 @@ class vTrainConfig:
         self.node_size = node_size
         self.trace_path = trace_path
         
-        # target model
+        # target model architecture (just placeholder)
         self.model_arch = model_arch
         
         # validate configuration
