@@ -18,5 +18,6 @@ To mark certain points to analyse, please use `timestamp(msg)`, which creates a 
 
 ### Consideration
 
-This profiler initializes `CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE` and `CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_POOL_LIMIT` to twice their default values.
+This profiler initializes `CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE` and `CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_POOL_LIMIT` to twice their default values (see [here](https://github.com/VIA-Research/vTrain/blob/5692874ef36ef1478b36acfb3d473ec7f4dd901c/profiler/cupti.cpp#L296)). 
+
 If the context size of your ROI exceeds the buffer size, consider increasing the buffer size or periodically invoking `flushTrace()`.
