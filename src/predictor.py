@@ -420,7 +420,7 @@ class vTrain():
         bucket = []
         bucket_indices = []
         bucket_sizes = []
-        bucket_size_limit = 1024 * 1024
+        bucket_size_limit = 1024 * 1024 # bytes
 
         for layer_num, (layer_name, _) in reversed(list(enumerate(layers))):
             for p in reversed(self.model_params[layer_name]):
