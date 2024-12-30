@@ -22,6 +22,7 @@ def modify_functions(model):
         def backward_pre_hook(self, *args):
             timestamp(f"backward start {name}")
 
+        # register backward prehook to the corresponding backward function
         ret.grad_fn.register_prehook(backward_pre_hook)
         return ret
 
