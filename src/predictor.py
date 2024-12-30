@@ -335,10 +335,13 @@ class vTrain():
         # collect traces
         log_filename = os.path.join(config.trace_path,
                                     f"trace_{config.hidden_size}_{config.tensor_parallel_size}_{config.micro_batch_size}")
+
         if os.path.isfile(log_filename):
+            # if there is collected traces, use them
             with open(log_filename, "r") as f:
                 traces = f.readlines()
         else:
+            # create model and collect traces
             self.create_model()
             trainer = Trainer(config, self.model)
             traces = trainer.train(log_filename)
