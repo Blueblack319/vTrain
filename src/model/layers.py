@@ -21,16 +21,12 @@ class ColumnParallelLinear(torch.nn.Module):
         self.output_size_per_partition = divide(output_size, world_size)
         self.skip_bias_add = skip_bias_add
 
-        # self.linear = nn.Linear(input_size, self.output_size_per_partition, bias=bias)
         self.weight = Parameter(torch.empty(self.output_size_per_partition, input_size))
         self.bias = Parameter(torch.empty(self.output_size_per_partition))
 
     def forward(self, input_):
         # Matrix multiply.
-        # output_parallel = self.linear(input_)
         bias = self.bias if not self.skip_bias_add else None
-        # print (input_.shape, self.weight.shape, bias)
-        # exit()
         output_parallel = F.linear(input_, self.weight, bias)
         if self.gather_output:
             output = torch.cat([output_parallel for _ in range(self.world_size)], -1) 
@@ -66,7 +62,6 @@ class RowParallelLinear(torch.nn.Module):
             input_parallel = input_
             
         # Matrix multiply.
-        # output = self.linear(input_parallel)
         output_ = F.linear(input_parallel, self.weight)
         if not self.skip_bias_add:
             output = output_ + self.bias if self.bias is not None else output_
