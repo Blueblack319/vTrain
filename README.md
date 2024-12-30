@@ -4,6 +4,14 @@ vTrain is a profiling-driven simulator designed to provide AI practitioners a fa
 
 For more details about this work, please refer to [our paper](https://doi.org/10.1109/MICRO61859.2024.00021) published in MICRO`24.
 
+## Table of Contents
+
+- [Setup Using Docker](#setup)
+- [Example Prediction of Single-iteration Time](#example)
+- [Reproducing validation results](#reproducing-validation-results)
+- [Acknowledgment](#acknowledgment)
+- [Citation](#citation)
+
 ## Setup
 
 ### Using Docker
