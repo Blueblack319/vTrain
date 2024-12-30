@@ -135,13 +135,7 @@ class DepGraph():
 
 
     def add_node(self, node, prev=[]):
-        # if prev is None:
-        #     print ("[ERROR] add_node: one of ``stream`` and ``prev`` must be specified")
-        #     return False
-
         stream = node.stream
-        # if self.streams[stream]:
-        #     self.add_dependency(self.streams[stream][-1], node)
         self.streams[stream].append(node)
 
         for prevNode in prev:
@@ -187,10 +181,6 @@ class DepGraph():
                 for c in cand:
                     print (f"{node} [{node.stream}] -> {c} [{c.stream}]")
 
-        # for node in self.streams["Comm"]:
-        #     for p in node.parent:
-        #         print (f"{p} ({p.stream}) -> {node} ({node.stream})")
-
         print ("")
 
     
@@ -201,7 +191,6 @@ class DepGraph():
                 continue
             if len(tasks) == 0:
                 continue
-            # timeline[stream] = []
             timeline[stream] = {"fwd": [], "bwd": [], "wu": [], "comm": []}
             for u in tasks:
                 stage = u.function.split("_")[0].lower()
@@ -225,7 +214,6 @@ class DepGraph():
                     color = ('lightcoral', 'tab:red')
                 else:
                     color = ('darkgrey')
-                # print (len(timeline[stream]))
                 ax.broken_barh(nodes, (1+i*5, 4), facecolors=color)
 
         plt.axis('tight')
