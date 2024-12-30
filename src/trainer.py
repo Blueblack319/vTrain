@@ -80,7 +80,7 @@ class Trainer():
         inputs = torch.randint(0, vocab_size, (local_batch_size, config.max_length), dtype=int).cuda()
         labels = torch.zeros((local_batch_size, model.vocab_size // config.tensor_parallel_size), dtype=int).cuda()
 
-        # warmup
+        # find best-performant algorithm (especially crucial for Conv layers)
         torch.backends.cudnn.benchmark = True
         for _ in range(10):
             self.train_step(model, inputs, labels, criterion, optimizer)
