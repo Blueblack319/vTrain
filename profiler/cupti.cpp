@@ -339,5 +339,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("init_trace", &initTrace, "Initialize CUPTI trace");
   m.def("finish_trace", &finishTrace, "Finish CUPTI trace");
   m.def("timestamp", &timestamp, "Make a timestamp");
-  m.def("flush_trace", &flushTrace, "");
+  m.def("flush_trace", &flushTrace, "Flush the device buffer");
 }
