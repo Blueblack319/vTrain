@@ -413,6 +413,7 @@ class vTrain():
 
     
     def compute_bucket_assignment(self):
+        # this is for modeling of PyTorch DDP's gradient bucketing
         layers = self.layers
 
         size = 0
