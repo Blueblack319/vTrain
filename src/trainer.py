@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 
 from .model.fused_adam import FusedAdam as Adam
-
 from vtrain_profiler import init_trace, timestamp, finish_trace
 
 import logging

@@ -162,6 +162,10 @@ class vTrainConfig:
     
 
 if __name__ == "__main__":
+    '''
+    Example usage
+    Run this script with `python config.json`
+    '''
     import os
 
     config_dir = "../config/"
