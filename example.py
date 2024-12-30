@@ -12,11 +12,8 @@ logger.setLevel(logging.INFO)
 def main(args):
     '''
     Usage:
-        1. single-node configuration example
-        > python example.py -c config/validation/single/config_val_single_0818.json
-
-        2. multi-node configuration example
-        > python example.py -c config/validation/multi/config_val_175B_8_4_16_6.json
+        python example.py -c /path/to/config/file
+        e.g., python example.py -c config/validation/single/config_val_single_0818.json
     '''
 
     # Load configuration file
