@@ -67,8 +67,6 @@ class ShardedGptModel(nn.Module):
         
 
 if __name__ == "__main__":
-    # import torch.cuda.nvtx as nvtx
-
     hidden_size = 1024
     vocab_size = 50257
     num_hidden_layers = 1
@@ -77,7 +75,6 @@ if __name__ == "__main__":
     batch_size = 2
     max_position_length = 1024
 
-    # bert = ShardedBertModel(config)
     gpt = ShardedGptModel(num_layers=1, hidden_size=hidden_size, world_size=4,
                             max_sequence_length=max_position_length)
 
@@ -91,4 +88,3 @@ if __name__ == "__main__":
         torch.cuda.synchronize()
         exit()
 
-    # print (f"bert output shape: {output[0].shape}")
