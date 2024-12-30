@@ -15,3 +15,8 @@ There are 5 types of traces, and each trace type is formatted as follows:
     - For copy-/memset-kind numbers, please refer to `CUpti_ActivityMemcpyKind` and `CUpti_ActivityMemoryKind` in the CUPTI document.
 
 To mark certain points to analyse, please use `timestamp(msg)`, which creates a timestamp with the given `msg` into traces.
+
+### Consideration
+
+The default buffer size for collecting traces is 32KB.
+If the context size of your ROI exceeds the buffer size, consider increasing the buffer size or periodically invoking `flushTrace()`.
