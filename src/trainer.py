@@ -100,6 +100,8 @@ class Trainer():
 
         torch.cuda.synchronize()
         traces = finish_trace().strip().split("\n")
+
+        # sort traces based on the start time
         traces.sort(key=lambda l: int(l.split(',')[0]))
 
         logger.info(f"number of traces collected: {len(traces)}")
