@@ -1,13 +1,11 @@
 #include <torch/extension.h>
-
 #include <stdio.h>
 #include <string>
-
 #include <cuda.h>
 #include <cupti.h>
-
 #include <memory>
 #include <stdexcept>
+
 
 // format string
 template<typename ... Args>
