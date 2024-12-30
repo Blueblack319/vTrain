@@ -11,6 +11,7 @@ logger = logging.getLogger()
 
 
 def modify_functions(model):
+    # assign pre-/post-hooks for forward and backward functions
     def forward_with_info(self, *x):
         timestamp(f"forward start {self.name}")
         ret = self.forward_(*x)
