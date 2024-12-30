@@ -507,6 +507,7 @@ class vTrain():
 
             self.cbid_table[cbid] = api
 
+        # exceptions
         self.cbid_table[0] = "CUPTI_RUNTIME_TRACE_CBID_INVALID"
         self.cbid_table[336] = "CUPTI_RUNTIME_TRACE_CBID_SIZE"
 
