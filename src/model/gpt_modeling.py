@@ -37,14 +37,10 @@ def bias_dropout_add_fused_train(x, bias, residual, prob):
 class ShardedGptLogit(torch.nn.Module):
     def __init__(self, vocab_size, hidden_size, world_size):
         super(ShardedGptLogit, self).__init__()
-        # self.embedding_weight = embedding_weight
         self.embedding_weight = nn.Embedding(vocab_size // world_size, hidden_size).weight
         self.world_size = world_size
     
     def forward(self, transformer_output):
-        # print (transformer_output.size(), self.embedding_weight.size())
-        # print (transformer_output.shape, self.embedding_weight.shape)
-        # exit()
         logits = F.linear(transformer_output, self.embedding_weight)
         # logits = torch.cat([logits for _ in range(self.world_size)], -1) 
 
@@ -80,7 +76,6 @@ class ShardedGptEmbeddings(torch.nn.Module):
         position_embeddings = self.position_embeddings(position_ids)
         embeddings = words_embeddings + position_embeddings
 
-        # Dropout.
         embeddings = self.embedding_dropout(embeddings)
 
         return embeddings
