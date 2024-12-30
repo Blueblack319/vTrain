@@ -18,12 +18,13 @@ There are 5 types of traces, and each trace type is formatted as follows:
 To mark certain points to analyse, please use `timestamp(msg)`, which creates timestamp with the given `msg` into traces.
 '''
 
-
+# Iinitialize
 vp.init_trace()
 
 C = torch.nn.Conv2d(3, 10, 3).cuda()
 
 for i in range(5):
+    # Mark with user-defined labels
 	vp.timestamp(f"iter {i}")
 	x = torch.randn(1, 3, 30, 30).cuda()
 	out = C(x)
@@ -31,13 +32,17 @@ for i in range(5):
 torch.cuda.synchronize()
 vp.timestamp("done")
 
+# Finish tracing and get the results
 trace = vp.finish_trace().strip().split('\n')
+
+# Sort the trace based on the start time
 trace.sort(key=lambda l: int(l.split(',')[0]))
 
+# Play with the collected traces
 for l in trace:
-	l_split = l.split(',')
+	trace_type = l.split(',')[2]
 
-	if l_split[2] in ["RUNTIME", "DRIVER"]:
+    # Print CUDA-related traces only
+	if trace_type in ["RUNTIME", "DRIVER"]:
 		continue
-
-	print (l)
+	print(l)
