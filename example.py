@@ -8,6 +8,7 @@ import argparse
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+
 def main(args):
     '''
     Usage:
@@ -17,14 +18,20 @@ def main(args):
         2. multi-node configuration example
         > python example.py -c config/validation/multi/config_val_175B_8_4_16_6.json
     '''
+
+    # Load configuration file
     config = vTrainConfig.load_from_file(args.config)
 
+    # Initialize vTrain with the configuration file
     sim = vTrain(config)
 
+    # Run simulation and get the results
     result, breakdown = sim()
+
+    # Show the predicted single-iteration training time
     pred_iter_time = max(result.values())/1000/1000
-    /
     logger.info(f"predicted iteration time: {pred_iter_time:.3f} ms")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
