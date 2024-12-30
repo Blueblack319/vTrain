@@ -357,6 +357,7 @@ class vTrain():
 
         # rebuild graph
         for stream, layer_nodes in graph.streams.items():
+            # Replace a layer node with a sequence of task nodes
             # (layer node) ==> (task node)-(task node)-...-(task node)
             new_nodes = []
             for idx, layer_node in enumerate(layer_nodes):
