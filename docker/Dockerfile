@@ -13,11 +13,11 @@ RUN pip3 install torch==2.0.1+cu118 --extra-index-url https://download.pytorch.o
 
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
-# clone NVIDIA apex repository
+# Clone NVIDIA apex repository
 WORKDIR /workspace
 RUN git clone https://github.com/NVIDIA/apex.git
 
-# checkout specific commit
+# Checkout specific commit
 WORKDIR /workspace/apex
 RUN git checkout 2386a912164b0c5cfcd8be7a2b890fbac5607c82
 RUN pip3 install -r requirements.txt
