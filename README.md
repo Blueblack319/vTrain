@@ -6,8 +6,8 @@ For more details about this work, please refer to [our paper](https://doi.org/10
 
 ## Table of Contents
 
-- [Setup Using Docker](#setup)
-- [Example Prediction of Single-iteration Time](#example)
+- [Setup using Docker](#setup)
+- [Example prediction of single-iteration time](#example)
 - [Reproducing validation results](#reproducing-validation-results)
 - [Acknowledgment](#acknowledgment)
 - [Citation](#citation)
