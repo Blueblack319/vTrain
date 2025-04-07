@@ -8,60 +8,97 @@ from .graph import CommNode, DepGraph, LayerNode, TaskNode
 import os
 import logging
 
+# [ ] Using NeMo framework
+# from nemo.collections import llm
+# from nemo import lightning as nl
+# from megatron.core.optimizer import OptimizerConfig
+
+# from .model.mcore_gpt_model import MCoreGptModel
+
 
 logger = logging.getLogger()
 logging.basicConfig(
     format="[%(asctime)s] (%(levelname)s) %(message)s",
     datefmt="%m/%d/%Y %H:%M:%S",
-    level=logging.INFO
+    level=logging.INFO,
 )
 
-class ParamInfo():
+
+class ParamInfo:
     def __init__(self, elem_num, elem_size=2):
         self.elem_num = elem_num
         self.elem_size = elem_size
 
     def numel(self):
         return self.elem_num
-    
+
     def element_size(self):
         return self.elem_size
-    
+
     def __repr__(self):
         return f"parameter having {self.elem_num} of {self.elem_size} bytes"
 
 
-class vTrain():
+class vTrain:
     def __init__(self, config: vTrainConfig):
         self.config = config
 
         self.model = None
+        # [ ] For DeepSeek
         self.model_params = {
-                                'embeddings': [
-                                    ParamInfo((config.vocab_size // config.tensor_parallel_size) * config.hidden_size),        # word embed
-                                    ParamInfo(config.max_length * config.hidden_size),                                         # pos embed
-                                ],
-                                'transformer': [
-                                    ParamInfo(config.hidden_size),                                                             # layernorm
-                                    ParamInfo(config.hidden_size),                                                             # layernorm
-                                    ParamInfo(3 * config.hidden_size * (config.hidden_size // config.tensor_parallel_size)),   # qkv
-                                    ParamInfo(3 * config.hidden_size // config.tensor_parallel_size),                          # qkv bias
-                                    ParamInfo(config.hidden_size * (config.hidden_size // config.tensor_parallel_size)),       # output proj
-                                    ParamInfo(config.hidden_size),                                                             # output proj bias
-                                    ParamInfo(config.hidden_size),                                                             # layernorm
-                                    ParamInfo(config.hidden_size),                                                             # layernorm
-                                    ParamInfo(config.hidden_size * (4 * config.hidden_size // config.tensor_parallel_size)),   # up proj
-                                    ParamInfo(4 * config.hidden_size // config.tensor_parallel_size),                          # up proj bias
-                                    ParamInfo(4 * config.hidden_size * (config.hidden_size // config.tensor_parallel_size)),   # down proj
-                                    ParamInfo(config.hidden_size),                                                             # down proj bias
-                                ],
-                                'logit': [
-                                    ParamInfo((config.vocab_size // config.tensor_parallel_size) * config.hidden_size)         # logit
-                                ],
-                            }
-        self.layers = [('embeddings', True)] + \
-                        [('transformer', True) for _ in range(config.num_layers)] + \
-                        [('logit', True)]
+            "embeddings": [
+                ParamInfo(
+                    (config.vocab_size // config.tensor_parallel_size)
+                    * config.hidden_size
+                ),  # word embed
+                ParamInfo(config.max_length * config.hidden_size),  # pos embed
+            ],
+            "transformer": [
+                ParamInfo(config.hidden_size),  # layernorm
+                ParamInfo(config.hidden_size),  # layernorm
+                ParamInfo(
+                    3
+                    * config.hidden_size
+                    * (config.hidden_size // config.tensor_parallel_size)
+                ),  # qkv
+                ParamInfo(
+                    3 * config.hidden_size // config.tensor_parallel_size
+                ),  # qkv bias
+                ParamInfo(
+                    config.hidden_size
+                    * (config.hidden_size // config.tensor_parallel_size)
+                ),  # output proj
+                ParamInfo(config.hidden_size),  # output proj bias
+                ParamInfo(config.hidden_size),  # layernorm
+                ParamInfo(config.hidden_size),  # layernorm
+                ParamInfo(
+                    config.hidden_size
+                    * (4 * config.hidden_size // config.tensor_parallel_size)
+                ),  # up proj
+                ParamInfo(
+                    4 * config.hidden_size // config.tensor_parallel_size
+                ),  # up proj bias
+                ParamInfo(
+                    4
+                    * config.hidden_size
+                    * (config.hidden_size // config.tensor_parallel_size)
+                ),  # down proj
+                ParamInfo(config.hidden_size),  # down proj bias
+            ],
+            "logit": [
+                ParamInfo(
+                    (config.vocab_size // config.tensor_parallel_size)
+                    * config.hidden_size
+                )  # logit
+            ],
+        }
+        # [ ] For DeepSeek
+        self.layers = (
+            [("embeddings", True)]
+            + [("transformer", True) for _ in range(config.num_layers)]
+            + [("final_layernorm", True)]
+            + [("logit", True)]
+        )
 
         self.cbid_table = None
         self.allreduce_LUT = self.get_allreduce_LUT()
@@ -69,7 +106,7 @@ class vTrain():
     def __call__(self):
         config = self.config
 
-        # create model
+        # create [[mod]]el
         self.graph = DepGraph()
 
         logger.info(config)
@@ -85,32 +122,35 @@ class vTrain():
         logger.info(f"start profiling...")
         kernel_dict = self.profile()
 
-        # Predict iteration time 
+        # Predict iteration time
         logger.info(f"start prediction...")
         result, breakdown = self.predict(kernel_dict)
 
         return result, breakdown
-    
 
-    def show_graph(self):
+    def show_graph(self, filename):
         if self.graph is None:
             logger.error(f"there is no simulated execution graph")
         else:
-            self.graph.show_graph()
-
+            self.graph.show_graph(filename)
 
     def create_model(self):
         config: vTrainConfig = self.config
 
         torch.set_default_dtype(torch.float16)
-        self.model = ShardedGptModel(num_layers=1,
-                                     hidden_size=config.hidden_size,
-                                     world_size=config.tensor_parallel_size,
-                                     num_attention_heads=config.num_attention_heads,
-                                     max_sequence_length=config.max_length)
+        self.model = ShardedGptModel(
+            num_layers=1,
+            hidden_size=config.hidden_size,
+            world_size=config.tensor_parallel_size,
+            num_attention_heads=config.num_attention_heads,
+            max_sequence_length=config.max_length,
+        )
 
         return True
 
+    # [ ] Create MCoreGPTModel
+    def create_mcore_model(self):
+        pass
 
     def create_nodes(self):
         layers = self.layers
@@ -137,28 +177,31 @@ class vTrain():
                 continue
             WUNode = (layer_num, layer_name, f"WU_{layer_name}", "GPU0")
             ingredients["wu"][layer_num] = WUNode
-        
-        return ingredients
-    
 
-    def _compute_p2p_latency(self,
-                             data_size,     # data_size in Bytes
-                             bandwidth):    # bandwidth in Gbps
+        return ingredients
+
+    def _compute_p2p_latency(
+        self, data_size, bandwidth  # data_size in Bytes
+    ):  # bandwidth in Gbps
         # simple latency-bandwidth model
-        bytes_per_sec = bandwidth * (2 ** 30) / 8
+        bytes_per_sec = bandwidth * (2**30) / 8
         latency_sec = data_size / (bytes_per_sec / 4)
-        latency_nano_sec = latency_sec * (10 ** 9)
+        latency_nano_sec = latency_sec * (10**9)
         return latency_nano_sec
-    
 
     def create_layer_graph(self, ingredients):
         config = self.config
         graph = self.graph
-        nodes_by_layer = [{"fwd": None, "bwd": None, "wu": None}
-                            for _ in range(len(self.layers)+1)]
+        nodes_by_layer = [
+            {"fwd": None, "bwd": None, "wu": None} for _ in range(len(self.layers) + 1)
+        ]
         graph.create_stream("Comm")
 
-        dp, tp, pp = config.data_parallel_size, config.tensor_parallel_size, config.pipeline_parallel_size
+        dp, tp, pp = (
+            config.data_parallel_size,
+            config.tensor_parallel_size,
+            config.pipeline_parallel_size,
+        )
 
         # create streams
         for gpu_num in range(pp):
@@ -167,14 +210,14 @@ class vTrain():
 
         # balance
         balance = [config.num_layers // pp for _ in range(pp)]
-        balance[0] += 1     # embedding
-        balance[-1] += 1    # logit
+        balance[0] += 1  # embedding
+        balance[-1] += 1  # logit
         num_layers = sum(balance)
 
         layer_idx_by_rank = []
         idx = 0
         for n in balance:
-            idx_list = list(range(idx, idx+n))
+            idx_list = list(range(idx, idx + n))
             layer_idx_by_rank.append(idx_list)
             idx = idx_list[-1] + 1
 
@@ -182,14 +225,19 @@ class vTrain():
 
         self.nodes_by_microbatch = [[] for _ in range(num_microbatch)]
         nodes_by_microbatch = self.nodes_by_microbatch
-        
-        local_batch_size = config.micro_batch_size
-        data_size = 2   # bytes
-        feature_map_size = local_batch_size * config.max_length * config.hidden_size * data_size
 
+        local_batch_size = config.micro_batch_size
+        data_size = 2  # bytes
+        feature_map_size = (
+            local_batch_size * config.max_length * config.hidden_size * data_size
+        )
+
+        ######################################################
+        # YJH: Create nodes for 3D parallelism.
+        ######################################################
         # warmup phase
         num_warmup_microbatch_rank0 = min(pp - 1, num_microbatch)
-        for microbatch_idx in range(num_warmup_microbatch_rank0):
+        for microbatch_idx in range(num_warmup_microbatch_rank0):  # YJH: 0 -> pp-2
             for rank in range(pp - 1 - microbatch_idx):
                 for layer_idx in layer_idx_by_rank[rank]:
                     nodeInfo = ingredients["fwd"][layer_idx]
@@ -201,17 +249,32 @@ class vTrain():
 
                     # comm across mp
                     if tp > 1 and nodeInfo[1] in ["encoder", "transformer"]:
-                        self._add_tp_communication(rank, tp, microbatch_idx, feature_map_size)
-                        self._add_tp_communication(rank, tp, microbatch_idx, feature_map_size)
-                    
+                        self._add_tp_communication(
+                            rank, tp, microbatch_idx, feature_map_size
+                        )
+                        self._add_tp_communication(
+                            rank, tp, microbatch_idx, feature_map_size
+                        )
+
                 # pipeline inter-stream gap
-                pp_gap = self._compute_p2p_latency(2*feature_map_size, config.inter_node_bandwidth)
+                pp_gap = self._compute_p2p_latency(
+                    2 * feature_map_size, config.inter_node_bandwidth
+                )
                 graph.streams[f"GPU{rank}"][-1].gap += pp_gap
 
         # 1F1B phase + cooldown phase
+        # YJH: (microbatch_idx, rank)
         for microbatch_idx in range(num_microbatch):
-            for rank in range(pp-1, -1, -1):
-                fwd_microbatch_idx = pp - rank - 1 + microbatch_idx
+            for rank in range(pp - 1, -1, -1):
+                """YJH
+                fwd_microbatch_idx
+                (0, pp-1 -> 0), delay: 0 -> pp-1
+                (1, pp-1 -> 0), delay: 0 -> pp-1
+                (2, pp-1 -> 0), delay: 0 -> pp-1
+                ...
+                (microbatch_num-1, pp-1 -> 0), delay: 0 -> pp-1
+                """
+                fwd_microbatch_idx = (pp - rank - 1) + microbatch_idx
                 bwd_microbatch_idx = microbatch_idx
 
                 # Fwd nodes
@@ -226,14 +289,20 @@ class vTrain():
 
                         # comm across mp
                         if tp > 1 and nodeInfo[1] in ["encoder", "transformer"]:
-                            self._add_tp_communication(rank, tp, fwd_microbatch_idx, feature_map_size)
-                            self._add_tp_communication(rank, tp, fwd_microbatch_idx, feature_map_size)
+                            self._add_tp_communication(
+                                rank, tp, fwd_microbatch_idx, feature_map_size
+                            )
+                            self._add_tp_communication(
+                                rank, tp, fwd_microbatch_idx, feature_map_size
+                            )
 
                     # comm across pp
                     if rank < pp - 1:
-                        pp_gap = self._compute_p2p_latency(2*feature_map_size, config.inter_node_bandwidth)
+                        pp_gap = self._compute_p2p_latency(
+                            2 * feature_map_size, config.inter_node_bandwidth
+                        )
                         graph.streams[f"GPU{rank}"][-1].gap += pp_gap
-                        
+
                     # loss node
                     if rank == pp - 1:
                         nodeInfo = ingredients["fwd"][num_layers]
@@ -246,7 +315,9 @@ class vTrain():
                 # Bwd nodes + recomputation
                 if config.use_checkpoint:
                     for layer_idx in reversed(layer_idx_by_rank[rank]):
-                        if rank < pp - 1:   # Last rank worker dosen't perform recomputation
+                        if (
+                            rank < pp - 1
+                        ):  # Last rank worker dosen't perform recomputation
                             recompNodeInfo = ingredients["fwd"][layer_idx]
                             recompNode = LayerNode(*recompNodeInfo)
                             recompNode.stream = f"GPU{rank}"
@@ -262,13 +333,19 @@ class vTrain():
 
                     # comm across mp
                     if tp > 1 and nodeInfo[1] in ["encoder", "transformer"]:
-                        self._add_tp_communication(rank, tp, bwd_microbatch_idx, feature_map_size)
-                        self._add_tp_communication(rank, tp, bwd_microbatch_idx, feature_map_size)
-                    
+                        self._add_tp_communication(
+                            rank, tp, bwd_microbatch_idx, feature_map_size
+                        )
+                        self._add_tp_communication(
+                            rank, tp, bwd_microbatch_idx, feature_map_size
+                        )
+
                 if rank > 0:
-                    pp_gap = self._compute_p2p_latency(2*feature_map_size, config.inter_node_bandwidth)
+                    pp_gap = self._compute_p2p_latency(
+                        2 * feature_map_size, config.inter_node_bandwidth
+                    )
                     graph.streams[f"GPU{rank}"][-1].gap += pp_gap
-        
+
         param_size_by_rank = [0 for _ in range(pp)]
         for rank, layer_nums in enumerate(layer_idx_by_rank):
             size = 0
@@ -284,15 +361,23 @@ class vTrain():
                 last_bwd = [self.graph.streams["GPU0"][-1]]
             else:
                 last_bwd = []
-
+            """ YJH
+            Assume the previous bucket communications are completely overlapped with computation.
+            Create comm nodes for each PP stage.
+            """
             for rank in range(pp):
                 comm_node = CommNode(param_size_by_rank[rank], "Comm")
                 if tp < config.node_size:  # intra-node grad allreduce for dp
-                    comm_node.duration = self.compute_comm_time(comm_node.bucket_size, dp)
-                else:
-                    comm_node.duration = comm_node.bucket_size \
-                                            / (config.inter_node_bandwidth * (2 ** 30) / 8) \
-                                            * (2*(dp-1)/dp) * (10 ** 9)
+                    comm_node.duration = self.compute_comm_time(
+                        comm_node.bucket_size, dp
+                    )
+                else:  # inter-node grad allreduce
+                    comm_node.duration = (
+                        comm_node.bucket_size
+                        / (config.inter_node_bandwidth * (2**30) / 8)
+                        * (2 * (dp - 1) / dp)
+                        * (10**9)
+                    )
                 self.graph.add_node(comm_node, prev=last_bwd)
                 self.graph.append_node_to_stream(comm_node, f"GPU{rank}")
 
@@ -305,21 +390,23 @@ class vTrain():
                 node.stream = f"GPU{rank}"
 
                 graph.add_node(node)
-                
+
                 for u in last_nodes:
                     u.add_dependency(node)
+        ######################################################
 
         # add dependencies between nodes
         for stream, nodes in graph.streams.items():
             if stream == "Comm":
                 continue
-            for i in range(len(nodes)-1):
-                nodes[i].add_dependency(nodes[i+1])
+            # YJH: Add dependency for Comp streams
+            for i in range(len(nodes) - 1):
+                nodes[i].add_dependency(nodes[i + 1])
 
+        # YJH: Add dependency in terms of micro-batch
         for nodes in nodes_by_microbatch:
-            for i in range(len(nodes)-1):
-                nodes[i].add_dependency(nodes[i+1])
-
+            for i in range(len(nodes) - 1):
+                nodes[i].add_dependency(nodes[i + 1])
 
     def _add_tp_communication(self, rank, mp, microbatch_idx, feature_map_size):
         comm_node = CommNode(feature_map_size, "Comm")
@@ -328,13 +415,14 @@ class vTrain():
         self.graph.append_node_to_stream(comm_node, f"GPU{rank}")
         self.nodes_by_microbatch[microbatch_idx].append(comm_node)
 
-
     def profile(self):
         config = self.config
-        
+
         # collect traces
-        log_filename = os.path.join(config.trace_path,
-                                    f"trace_{config.hidden_size}_{config.tensor_parallel_size}_{config.micro_batch_size}")
+        log_filename = os.path.join(
+            config.trace_path,
+            f"trace_{config.hidden_size}_{config.tensor_parallel_size}_{config.micro_batch_size}",
+        )
 
         if os.path.isfile(log_filename):
             # if there is collected traces, use them
@@ -343,24 +431,37 @@ class vTrain():
         else:
             # create model and collect traces
             self.create_model()
+            # [ ] Create MCoreGPTModel
+            # self.create_mcore_model()
+
             trainer = Trainer(config, self.model)
             traces = trainer.train(log_filename)
 
         # parse traces
         kernel_dict = self.parse_traces(traces)
+        # DEBUG
+        # print("kernel_dict")
+        # for k, v in kernel_dict.items():
+        #     print(k)
+        #     print(v)
 
         return kernel_dict
-
 
     def predict(self, kernel_dict):
         graph = self.graph
 
+        ######################################################
+        # YJH: Operator-granularity -> Task-granularity
+        ######################################################
         # rebuild graph
         for stream, layer_nodes in graph.streams.items():
             # Replace a layer node with a sequence of task nodes
             # (layer node) ==> (task node)-(task node)-...-(task node)
+            # e.g., Stream0: Fwd_embeddings-Fwd_transformer-...-Fwd_logit
+            # e.g., Fwd_0 ==> kernel_0-1-2-3
             new_nodes = []
             for idx, layer_node in enumerate(layer_nodes):
+                # e.g., layer_node.function can be Fwd_embeddings or Fwd_transformer or Fwd_logit or ...
                 nodeInfo = kernel_dict.get(layer_node.function, [])
                 if len(nodeInfo) == 0:
                     new_nodes.append(layer_node)
@@ -370,14 +471,17 @@ class vTrain():
                 task_nodes = [TaskNode(*(info[:-2] + info[-1:])) for info in nodeInfo]
                 for node in task_nodes:
                     node.stream = stream
-                for i in range(len(task_nodes)-1):
-                    task_nodes[i].add_dependency(task_nodes[i+1])
+                for i in range(len(task_nodes) - 1):
+                    task_nodes[i].add_dependency(task_nodes[i + 1])
 
                 # replace nodes
                 self.replace_node(layer_node, idx, task_nodes)
                 new_nodes += task_nodes
+                # DEBUG
+                # print(stream, len(new_nodes))
 
             graph.streams[stream] = new_nodes
+        ######################################################
 
         # prediction (Algorithm 1 in paper)
         num_nodes = 0
@@ -385,8 +489,8 @@ class vTrain():
         P = dict()
         P_brk = dict()
         for stream, nodes in graph.streams.items():
-            P[stream] = 0.
-            P_brk[stream] = {"compute": 0., "comm": 0.}
+            P[stream] = 0.0
+            P_brk[stream] = {"compute": 0.0, "comm": 0.0}
             num_nodes += len(nodes)
             for u in nodes:
                 if u.ref == 0:
@@ -408,10 +512,9 @@ class vTrain():
                 c.ref -= 1
                 if c.ref == 0:
                     Q.append(c)
-                    
+
         return P, P_brk
 
-    
     def compute_bucket_assignment(self):
         # this is for modeling of PyTorch DDP's gradient bucketing
         layers = self.layers
@@ -420,7 +523,7 @@ class vTrain():
         bucket = []
         bucket_indices = []
         bucket_sizes = []
-        bucket_size_limit = 1024 * 1024 # bytes
+        bucket_size_limit = 1024 * 1024  # bytes
 
         for layer_num, (layer_name, _) in reversed(list(enumerate(layers))):
             for p in reversed(self.model_params[layer_name]):
@@ -437,9 +540,8 @@ class vTrain():
         if size > 0:
             bucket_indices.append(bucket)
             bucket_sizes.append(size)
-        
-        return bucket_sizes, bucket_indices
 
+        return bucket_sizes, bucket_indices
 
     def parse_traces(self, traces):
         if self.cbid_table is None:
@@ -451,20 +553,20 @@ class vTrain():
         prevFunc = None
         func = "NONE"
         for trace in traces:
-            info = trace.strip().split(',')
+            info = trace.strip().split(",")
             type = info[2]
             if type == "TIMESTAMP":
                 msg = info[-1].strip('"')
-                layer_num = msg.strip().split()[-1]
+                layer_name = msg.strip().split()[-1]
                 if "forward start" in msg:
-                    func = f"Fwd_{layer_num}"
+                    func = f"Fwd_{layer_name}"
                 elif "backward start" in msg:
-                    func = f"Bwd_{layer_num}"
+                    func = f"Bwd_{layer_name}"
                 elif "WU start" in msg:
-                    func = f"WU_{layer_num}"
+                    func = f"WU_{layer_name}"
                 elif "end" in msg:
                     func = "NONE"
-                
+
                 continue
 
             if type == "RUNTIME" or type == "DRIVER":
@@ -478,8 +580,11 @@ class vTrain():
                 cid = int(info[-1])
 
                 if prevFunc and func2node[prevFunc]:
+                    # Fill the gap
                     prev_task = func2node[prevFunc][-1]
-                    func2node[prevFunc][-1] = prev_task[:-1] + (start - prev_task[-2] - prev_task[0],)
+                    func2node[prevFunc][-1] = prev_task[:-1] + (
+                        start - prev_task[-2] - prev_task[0],
+                    )
 
                 nodeInfo = (duration, name, None, cid, start, 0)
 
@@ -489,9 +594,8 @@ class vTrain():
                 func2node[corrFunc].append(nodeInfo)
 
                 prevFunc = corrFunc
-        
-        return func2node
 
+        return func2node
 
     def get_cbid_table(self):
         f = open("src/cupti_runtime_cbid", "r")
@@ -499,7 +603,7 @@ class vTrain():
             if not "CUPTI_RUNTIME_TRACE_CBID" in l:
                 continue
 
-            api = '_'.join(l.split('_')[4:-1])
+            api = "_".join(l.split("_")[4:-1])
             try:
                 cbid = int(l.strip().split()[-1][:-1])
             except:
@@ -512,7 +616,6 @@ class vTrain():
         self.cbid_table[336] = "CUPTI_RUNTIME_TRACE_CBID_SIZE"
 
         f.close()
-
 
     def get_allreduce_LUT(self):
         config = self.config
@@ -531,36 +634,38 @@ class vTrain():
             f.close()
 
             for l in lines:
-                info = l.strip().split(',')
-                size = int(info[0]) // 1024 // 1024     # megabytes
+                info = l.strip().split(",")
+                size = int(info[0]) // 1024 // 1024  # megabytes
                 allreduce_LUT[num_gpus][size] = {
                     "time": int(info[-2]),
-                    "busbw": float(info[-1])
+                    "busbw": float(info[-1]),
                 }
-        
-        return allreduce_LUT
 
+        return allreduce_LUT
 
     def compute_comm_time(self, size, num_gpus):
         if num_gpus not in self.allreduce_LUT.keys():
             # if there are more than 8 GPUs, latency is estimated by BW
             # assuming a 16-GPU node with all-to-all NVSwitch topology such as HGX
-            t = size / (self.config.intra_node_bandwidth * (2 ** 30)) * (2*(num_gpus-1)/num_gpus) # second
-            t = t * (10 ** 9)  # nanosecond
+            t = (
+                size
+                / (self.config.intra_node_bandwidth * (2**30))
+                * (2 * (num_gpus - 1) / num_gpus)
+            )  # second
+            t = t * (10**9)  # nanosecond
 
         else:
             # read from allreduce latency LUT
             size_mb = round(size / 1024 / 1024)
             if size_mb not in self.allreduce_LUT[num_gpus].keys():
-                bw = self.allreduce_LUT[num_gpus][1024]['busbw'] # GB/s
-                bw = bw * 1024 # MB/s
-                t = size_mb / bw # s
-                t = t * (10 ** 9) # ns
+                bw = self.allreduce_LUT[num_gpus][1024]["busbw"]  # GB/s
+                bw = bw * 1024  # MB/s
+                t = size_mb / bw  # s
+                t = t * (10**9)  # ns
             else:
-                t = self.allreduce_LUT[num_gpus][size_mb]['time']
-        
-        return t
+                t = self.allreduce_LUT[num_gpus][size_mb]["time"]
 
+        return t
 
     def replace_node(self, old, old_idx, new):
         old_parent = old.parent[:]
@@ -572,10 +677,10 @@ class vTrain():
         for c in old_child:
             old.del_dependency(c)
             new[-1].add_dependency(c)
-        
+
         for u in new:
             u.function = old.function
-        
+
         new[-1].gap = old.gap
         new[-1].note = old.note
 
@@ -583,10 +688,10 @@ class vTrain():
 if __name__ == "__main__":
 
     config = vTrainConfig.load_from_file("test_config.json")
-    sim = vTrain()
+    sim = vTrain(config)
 
     result, _ = sim()
-    print (result)
-    pred_iter_time = max(result.values())/1000/1000
+    print(result)
+    pred_iter_time = max(result.values()) / 1000 / 1000
     logging.info(f"predicted iteration time: {pred_iter_time:.6f} ms")
     sim.graph.show_graph()

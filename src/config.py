@@ -5,7 +5,7 @@ import json
 class vTrainConfig:
     """
     Configuration class for vTrain.
-    
+
     Attributes:
         num_gpus (int): Number of total GPUs.
         tensor_parallel_size (int): Tensor parallel size.
@@ -27,32 +27,37 @@ class vTrainConfig:
         pipeline_scheduling (str): Pipeline scheduling (default: "1f1b")
         node_size (int): Number of GPUs within a node.
         trace_path (str): Path where GPU kernel traces exist and are going to be stored.
+        expert_load_balance (float): Degree of load-balance for MoE models
+        expert_parallelism_size (int): Expert parallelism size
+        ddr_capacity (int): The size of DDR memory
+        ddr_bandwidth (int): Maximum bandwidth of DDR memory
     """
-    
-    def __init__(self,
-                 num_gpus: Optional[int]                    = None,
-                 tensor_parallel_size: Optional[int]        = None,
-                 data_parallel_size: Optional[int]          = None,
-                 pipeline_parallel_size: Optional[int]      = None,
-                 gpu_name: str                              = "A100",
-                 global_batch_size: int                     = 1920,
-                 micro_batch_size: Optional[int]            = None,
-                 model_arch: str                            = "ShardedGptModel",
-                 num_layers: int                            = 105,
-                 hidden_size: int                           = 20480,
-                 num_attention_heads: int                   = 128,
-                 max_length: int                            = 2048,
-                 vocab_size: int                            = 50257,
-                 use_gradient_bucket: bool                  = False,
-                 use_checkpoint: bool                       = True,
-                 ddp_bucket_size: Optional[int]             = None,                 # MB
-                 inter_node_bandwidth: int                  = 800,                  # Gbps
-                 intra_node_bandwidth: int                  = 150,                  # GB/s
-                 pipeline_scheduling: str                   = "1f1b",
-                 node_size: int                             = 8,
-                 trace_path: str                            = "trace/"
-                 ):
-        
+
+    def __init__(
+        self,
+        num_gpus: Optional[int] = None,
+        tensor_parallel_size: Optional[int] = None,
+        data_parallel_size: Optional[int] = None,
+        pipeline_parallel_size: Optional[int] = None,
+        gpu_name: str = "A100",
+        global_batch_size: int = 1920,
+        micro_batch_size: Optional[int] = None,
+        model_arch: str = "ShardedGptModel",
+        num_layers: int = 105,
+        hidden_size: int = 20480,
+        num_attention_heads: int = 128,
+        max_length: int = 2048,
+        vocab_size: int = 50257,
+        use_gradient_bucket: bool = False,
+        use_checkpoint: bool = True,
+        ddp_bucket_size: Optional[int] = None,  # MB
+        inter_node_bandwidth: int = 800,  # Gbps
+        intra_node_bandwidth: int = 150,  # GB/s
+        pipeline_scheduling: str = "1f1b",
+        node_size: int = 8,
+        trace_path: str = "trace/",
+    ):
+
         self.num_gpus = num_gpus
         self.gpu_name = gpu_name
         self.tensor_parallel_size = tensor_parallel_size
@@ -73,65 +78,106 @@ class vTrainConfig:
         self.intra_node_bandwidth = intra_node_bandwidth
         self.node_size = node_size
         self.trace_path = trace_path
-        
+
         # target model architecture (just placeholder)
         self.model_arch = model_arch
-        
+
         # validate configuration
         self.validate_config()
-            
 
     def validate_config(self):
         """Validate configuration constraints."""
-        
+
         if self.num_gpus is None:
-            assert all(x is not None for x in [self.tensor_parallel_size, self.data_parallel_size, self.pipeline_parallel_size])
-            self.num_gpus = self.tensor_parallel_size * self.pipeline_parallel_size * self.data_parallel_size
-        elif any(x is None for x in [self.tensor_parallel_size, self.data_parallel_size, self.pipeline_parallel_size]):
-            if sum(x is None for x in [self.tensor_parallel_size, self.data_parallel_size, self.pipeline_parallel_size]) > 1:
-                raise AssertionError("Only one of tensor_parallel_size, data_parallel_size, or pipeline_parallel_size can be None.")
-            
+            assert all(
+                x is not None
+                for x in [
+                    self.tensor_parallel_size,
+                    self.data_parallel_size,
+                    self.pipeline_parallel_size,
+                ]
+            )
+            self.num_gpus = (
+                self.tensor_parallel_size
+                * self.pipeline_parallel_size
+                * self.data_parallel_size
+            )
+        elif any(
+            x is None
+            for x in [
+                self.tensor_parallel_size,
+                self.data_parallel_size,
+                self.pipeline_parallel_size,
+            ]
+        ):
+            if (
+                sum(
+                    x is None
+                    for x in [
+                        self.tensor_parallel_size,
+                        self.data_parallel_size,
+                        self.pipeline_parallel_size,
+                    ]
+                )
+                > 1
+            ):
+                raise AssertionError(
+                    "Only one of tensor_parallel_size, data_parallel_size, or pipeline_parallel_size can be None."
+                )
+
             # Calculate the missing value
             if self.tensor_parallel_size is None:
-                self.tensor_parallel_size = self.num_gpus // (self.pipeline_parallel_size * self.data_parallel_size)
+                self.tensor_parallel_size = self.num_gpus // (
+                    self.pipeline_parallel_size * self.data_parallel_size
+                )
             elif self.data_parallel_size is None:
-                self.data_parallel_size = self.num_gpus // (self.tensor_parallel_size * self.pipeline_parallel_size)
+                self.data_parallel_size = self.num_gpus // (
+                    self.tensor_parallel_size * self.pipeline_parallel_size
+                )
             elif self.pipeline_parallel_size is None:
-                self.pipeline_parallel_size = self.num_gpus // (self.tensor_parallel_size * self.data_parallel_size)
+                self.pipeline_parallel_size = self.num_gpus // (
+                    self.tensor_parallel_size * self.data_parallel_size
+                )
         else:
-            assert self.num_gpus == (self.tensor_parallel_size * self.pipeline_parallel_size * self.data_parallel_size), \
-                "num_gpus must be equivalent to (tensor_parallel_size * pipeline_parallel_size * data_parallel_size)."
-        
+            assert self.num_gpus == (
+                self.tensor_parallel_size
+                * self.pipeline_parallel_size
+                * self.data_parallel_size
+            ), "num_gpus must be equivalent to (tensor_parallel_size * pipeline_parallel_size * data_parallel_size)."
+
         if self.pipeline_parallel_size <= 1:
             self.micro_batch_size = self.global_batch_size // self.data_parallel_size
-            print (f"[vTrainConfig] micro_batch_size is set by 'global_batch_size // data_parallel_size' as pipeline_parallel_size is 1")
+            print(
+                f"[vTrainConfig] micro_batch_size is set by 'global_batch_size // data_parallel_size' as pipeline_parallel_size is 1"
+            )
 
-            
-        assert self.global_batch_size % self.data_parallel_size == 0, \
-            "global_batch_size must be divisible by data_parallel_size."
-        assert self.global_batch_size % self.micro_batch_size == 0, \
-            "global_batch_size must be divisible by micro_batch_size."
-        assert self.num_layers % self.pipeline_parallel_size == 0, \
-            "num_layers must be divisible by pipeline_parallel_size."
-        assert self.hidden_size % self.num_attention_heads == 0, \
-            "hidden_size must be divisible by num_attention_heads."
-        assert self.num_attention_heads % self.tensor_parallel_size == 0, \
-            "num_attention_heads must be divisible by tensor_parallel_size."
-        
+        assert (
+            self.global_batch_size % self.data_parallel_size == 0
+        ), "global_batch_size must be divisible by data_parallel_size."
+        assert (
+            self.global_batch_size % self.micro_batch_size == 0
+        ), "global_batch_size must be divisible by micro_batch_size."
+        assert (
+            self.num_layers % self.pipeline_parallel_size == 0
+        ), "num_layers must be divisible by pipeline_parallel_size."
+        assert (
+            self.hidden_size % self.num_attention_heads == 0
+        ), "hidden_size must be divisible by num_attention_heads."
+        assert (
+            self.num_attention_heads % self.tensor_parallel_size == 0
+        ), "num_attention_heads must be divisible by tensor_parallel_size."
 
     def save_to_file(self, file_path: str):
         """Save configuration to a JSON file."""
-        with open(file_path, 'w') as f:
+        with open(file_path, "w") as f:
             json.dump(self.__dict__, f, indent=4)
-
 
     @classmethod
     def load_from_file(cls, file_path: str):
         """Load configuration from a JSON file."""
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             config_dict = json.load(f)
         return cls(**config_dict)
-    
 
     def __repr__(self):
         return (
@@ -159,13 +205,12 @@ class vTrainConfig:
             ")"
         )
 
-    
 
 if __name__ == "__main__":
-    '''
+    """
     Example usage
     Run this script with `python config.json`
-    '''
+    """
     import os
 
     config_dir = "../config/"
@@ -176,13 +221,13 @@ if __name__ == "__main__":
             continue
 
         test_name = "_".join(test_config.split(".")[0].split("_")[2:])
-        print ("="*12 + f" TEST: {test_name} " + "="*12)
+        print("=" * 12 + f" TEST: {test_name} " + "=" * 12)
 
         try:
             config = vTrainConfig.load_from_file(config_dir + test_config)
         except AssertionError as e:
-            print (f"AssertionError occurred: {e}")
+            print(f"AssertionError occurred: {e}")
         else:
-            print (config)
+            print(config)
 
-        print ()
+        print()

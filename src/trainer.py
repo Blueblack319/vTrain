@@ -16,7 +16,7 @@ def modify_functions(model):
         timestamp(f"forward start {self.name}")
         ret = self.forward_(*x)
         timestamp(f"forward end {self.name}")
-        
+
         name = self.name
 
         def backward_pre_hook(self, *args):
@@ -34,18 +34,17 @@ def modify_functions(model):
         m.forward = forward_with_info.__get__(m, m.__class__)
         if all(p.requires_grad for p in m.parameters()):
             m.register_full_backward_hook(backward_hook)
-    
+
     return model
 
 
-class Trainer():
+class Trainer:
     def __init__(self, config, model):
         self.config = config
         self.model = model
         self.layers = [t[-1] for t in model.named_children()]
-
         for name, layer in self.model.named_children():
-            layer.name = f"{name}"
+            layer.name = f"{name}"  # embedding, transformer, layernorm, logit
 
     def train(self, log_filename):
         config = self.config
@@ -65,22 +64,33 @@ class Trainer():
             return loss
 
         # profile training job
-        param_groups = [{"params": l.parameters(), "lr": 0.01, "momentum": 0.9,
-                                    "weight_decay": 5e-4, "layer": l.name}
-                                for l in self.layers[:-1]]
+        param_groups = [
+            {
+                "params": l.parameters(),
+                "lr": 0.01,
+                "momentum": 0.9,
+                "weight_decay": 5e-4,
+                "layer": l.name,
+            }
+            for l in self.layers[:-1]
+        ]
         optimizer = Adam(param_groups)
 
-        
         logger.info(f"target model: {config.model_arch}")
         logger.info(f"local batch size: {local_batch_size}")
 
         # warm-up
         model = modify_functions(self.model)
-        num_step = 5    # it can be adjusted
+        num_step = 5  # it can be adjusted
 
         vocab_size = self.model.vocab_size
-        inputs = torch.randint(0, vocab_size, (local_batch_size, config.max_length), dtype=int).cuda()
-        labels = torch.zeros((local_batch_size, model.vocab_size // config.tensor_parallel_size), dtype=int).cuda()
+        inputs = torch.randint(
+            0, vocab_size, (local_batch_size, config.max_length), dtype=int
+        ).cuda()
+        labels = torch.zeros(
+            (local_batch_size, model.vocab_size // config.tensor_parallel_size),
+            dtype=int,
+        ).cuda()
 
         # find best-performant algorithm (especially crucial for Conv layers)
         torch.backends.cudnn.benchmark = True
@@ -102,7 +112,7 @@ class Trainer():
         traces = finish_trace().strip().split("\n")
 
         # sort traces based on the start time
-        traces.sort(key=lambda l: int(l.split(',')[0]))
+        traces.sort(key=lambda l: int(l.split(",")[0]))
 
         logger.info(f"number of traces collected: {len(traces)}")
 
@@ -111,8 +121,6 @@ class Trainer():
 
         return traces
 
-        
-
     def train_step(self, model, inputs, labels, criterion, optimizer, profile=False):
         # forward pass including loss function
         outputs = model(inputs)
@@ -120,7 +128,7 @@ class Trainer():
 
         # backward pass
         loss.backward()
-        
+
         # optimizer step
         optimizer.step(profile=profile)
         optimizer.zero_grad()
