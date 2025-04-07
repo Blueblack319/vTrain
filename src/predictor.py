@@ -96,7 +96,6 @@ class vTrain:
         self.layers = (
             [("embeddings", True)]
             + [("transformer", True) for _ in range(config.num_layers)]
-            + [("final_layernorm", True)]
             + [("logit", True)]
         )
 
