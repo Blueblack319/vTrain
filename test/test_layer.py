@@ -298,18 +298,24 @@ class MCoreGPTModel(nn.Module):
 
         # Embeddings.
         torch.cuda.nvtx.range_push("Embedding")
+        timestamp("forward start embeddings")
         hidden_states = self.embeddings(input_ids, position_ids)
+        timestamp("forward end embeddings")
         torch.cuda.nvtx.range_pop()
 
         # Transformer.
+        timestamp("forward start transformer")
         hidden_states = self.transformer(hidden_states, attention_mask)
+        timestamp("forward end transformer")
 
         if not self.post_process:
             return hidden_states
 
         # Logits
-        torch.cuda.nvtx.range_push("Logit")
+        torch.cuda.nvtx.range_push("Output Layer")
+        timestamp("forward start output_layer")
         logits, _ = self.output_layer(hidden_states)
+        timestamp("forward end output_layer")
         torch.cuda.nvtx.range_pop()
         return logits
 

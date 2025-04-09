@@ -42,6 +42,12 @@ from megatron.core.transformer.transformer_block import TransformerBlockSubmodul
 from tests.unit_tests.test_utilities import Utils
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 from megatron.training.initialize import initialize_megatron
+from megatron.core.transformer.transformer_layer import TransformerLayer
+
+# vTrain
+from src.model.fused_adam import FusedAdam as Adam
+from vtrain_profiler import init_trace, timestamp, finish_trace
+from pathlib import Path
 
 
 #################################################################
@@ -452,6 +458,36 @@ def create_example_batch(
     return tokens, labels, loss_mask, attention_mask, position_ids
 
 
+def modify_functions(module):
+    # assign pre-/post-hooks for forward and backward functions
+    def forward_with_info(self, *args, **kwargs):
+        timestamp(f"forward start {self.name}")
+        ret = self.forward_(*args, **kwargs)
+        timestamp(f"forward end {self.name}")
+
+        name = self.name
+
+        def backward_pre_hook(self, *args):
+            timestamp(f"backward start {name}")
+
+        # register backward prehook to the corresponding backward function
+        if isinstance(ret, tuple):
+            ret[0].grad_fn.register_prehook(backward_pre_hook)
+        else:
+            ret.grad_fn.register_prehook(backward_pre_hook)
+        return ret
+
+    def backward_hook(self, *args):
+        timestamp(f"backward end {self.name}")
+
+    module.forward_ = module.forward
+    module.forward = forward_with_info.__get__(module, module.__class__)
+    if all(p.requires_grad for p in module.parameters()):
+        module.register_full_backward_hook(backward_hook)
+
+    return module
+
+
 if __name__ == "__main__":
 
     # Temporary for transition to core datasets
@@ -502,14 +538,45 @@ if __name__ == "__main__":
         .expand_as(input_ids)
     )
 
-    for name, layer in model.decoder.layers.named_children():
-        print(name)
+    # [ ] Modify functions
+    for name, module in model.named_children():
+        if name == "decoder":
+            for t_idx, transformer in module.layers.named_children():
+                if isinstance(transformer, TransformerLayer):
+                    transformer.name = f"transformer_{t_idx}"
+                    modify_functions(transformer)
+        else:
+            module.name = name
+            modify_functions(module)
+    ###
 
-    # for _ in range(5):
-    # _ = model(
-    #     tokens, position_ids, attention_mask, labels=labels, loss_mask=loss_mask
-    # )
-    # _ = model(input_ids, position_ids, attention_mask)
+    # [ ] Collect traces
+    _criterion = torch.nn.CrossEntropyLoss()
+
+    if torch.cuda.is_available():
+        _criterion = _criterion.cuda()
+        # [ ] Half?
+
+    def criterion(outputs, labels):
+        timestamp("forward start loss")
+        loss = _criterion(outputs, labels)
+        timestamp("forward end loss")
+        return loss
+
+    ###
+
+    for batch_idx in range(5):
+        # _ = model(
+        #     tokens, position_ids, attention_mask, labels=labels, loss_mask=loss_mask
+        # )
+        init_trace()
+        _ = model(input_ids, position_ids, attention_mask)
+        traces = finish_trace().strip().split("\n")
+
+        log_filename = Path(f"test/logs/trace/trace_{batch_idx}")
+        log_filename.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_filename, "w") as f:
+            f.write("\n".join(traces))
 
     # pretrain(
     #     train_valid_test_datasets_provider,
