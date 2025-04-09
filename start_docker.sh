@@ -1,1 +1,0 @@
-docker run -it --name vtrain --gpus all -v ./:/workspace/vTrain vtrain:0.1 /bin/bash

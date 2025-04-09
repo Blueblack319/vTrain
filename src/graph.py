@@ -153,7 +153,7 @@ class DepGraph:
         parent.del_dependency(child)
 
     """
-        helper functions for debugging
+    helper functions for debugging
     """
 
     def print_graph(self):

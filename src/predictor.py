@@ -44,16 +44,15 @@ class vTrain:
         self.config = config
 
         self.model = None
-        # [ ] For DeepSeek
         self.model_params = {
-            "embeddings": [
+            "embedding": [
                 ParamInfo(
                     (config.vocab_size // config.tensor_parallel_size)
                     * config.hidden_size
                 ),  # word embed
                 ParamInfo(config.max_length * config.hidden_size),  # pos embed
             ],
-            "transformer": [
+            "transformer_layer": [
                 ParamInfo(config.hidden_size),  # layernorm
                 ParamInfo(config.hidden_size),  # layernorm
                 ParamInfo(
@@ -85,18 +84,20 @@ class vTrain:
                 ),  # down proj
                 ParamInfo(config.hidden_size),  # down proj bias
             ],
-            "logit": [
+            "output_layer": [
                 ParamInfo(
                     (config.vocab_size // config.tensor_parallel_size)
                     * config.hidden_size
-                )  # logit
+                )  # output_layer
             ],
         }
-        # [ ] For DeepSeek
         self.layers = (
-            [("embeddings", True)]
-            + [("transformer", True) for _ in range(config.num_layers)]
-            + [("logit", True)]
+            [("embedding", True)]  # embeddings -> embedding
+            + [
+                ("transformer_layer", True) for _ in range(config.num_layers)
+            ]  # transformer -> transformer_layer
+            + [("final_layernorm", True)]  # X -> final_layernorm
+            + [("output_layer", True)]  # logit -> output_layer
         )
 
         self.cbid_table = None
@@ -105,7 +106,7 @@ class vTrain:
     def __call__(self):
         config = self.config
 
-        # create [[mod]]el
+        # create model
         self.graph = DepGraph()
 
         logger.info(config)
@@ -151,6 +152,7 @@ class vTrain:
     def create_mcore_model(self):
         pass
 
+    # [x] Passed
     def create_nodes(self):
         layers = self.layers
         ingredients = {"fwd": {}, "bwd": {}, "wu": {}}
@@ -188,6 +190,7 @@ class vTrain:
         latency_nano_sec = latency_sec * (10**9)
         return latency_nano_sec
 
+    # [x] Passed
     def create_layer_graph(self, ingredients):
         config = self.config
         graph = self.graph
@@ -210,7 +213,7 @@ class vTrain:
         # balance
         balance = [config.num_layers // pp for _ in range(pp)]
         balance[0] += 1  # embedding
-        balance[-1] += 1  # logit
+        balance[-1] += 1  # output_layer
         num_layers = sum(balance)
 
         layer_idx_by_rank = []
@@ -247,7 +250,7 @@ class vTrain:
                     nodes_by_microbatch[microbatch_idx].append(node)
 
                     # comm across mp
-                    if tp > 1 and nodeInfo[1] in ["encoder", "transformer"]:
+                    if tp > 1 and nodeInfo[1] in ["encoder", "transformer_layer"]:
                         self._add_tp_communication(
                             rank, tp, microbatch_idx, feature_map_size
                         )
@@ -287,7 +290,7 @@ class vTrain:
                         nodes_by_microbatch[fwd_microbatch_idx].append(node)
 
                         # comm across mp
-                        if tp > 1 and nodeInfo[1] in ["encoder", "transformer"]:
+                        if tp > 1 and nodeInfo[1] in ["encoder", "transformer_layer"]:
                             self._add_tp_communication(
                                 rank, tp, fwd_microbatch_idx, feature_map_size
                             )
@@ -331,7 +334,7 @@ class vTrain:
                     nodes_by_microbatch[bwd_microbatch_idx].append(node)
 
                     # comm across mp
-                    if tp > 1 and nodeInfo[1] in ["encoder", "transformer"]:
+                    if tp > 1 and nodeInfo[1] in ["encoder", "transformer_layer"]:
                         self._add_tp_communication(
                             rank, tp, bwd_microbatch_idx, feature_map_size
                         )
@@ -428,11 +431,11 @@ class vTrain:
             with open(log_filename, "r") as f:
                 traces = f.readlines()
         else:
-            # create model and collect traces
-            self.create_model()
             # [ ] Create MCoreGPTModel
             # self.create_mcore_model()
 
+            # create model and collect traces
+            self.create_model()
             trainer = Trainer(config, self.model)
             traces = trainer.train(log_filename)
 

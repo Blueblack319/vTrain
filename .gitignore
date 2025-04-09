@@ -9,3 +9,6 @@ profiler/*.egg
 profiler/dist
 nsys
 trace
+test/logs
+test/log
+test/tb_logs
