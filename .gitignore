@@ -12,3 +12,4 @@ trace
 test/logs
 test/log
 test/tb_logs
+test/profiler_logs

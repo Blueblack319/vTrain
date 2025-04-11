@@ -116,15 +116,14 @@ if __name__ == "__main__":
     #         modify_functions(module)
 
     _criterion = torch.nn.CrossEntropyLoss().cuda()
-
-    def submodule_backward_hook(module, grad_input, grad_output):
-        # This code runs as part of the backward pass. We can add a record_function scope here:
-        with record_function(f"Backward_{module._get_name()}"):
-            # We do not change anything with gradients here; we're just labeling.
-            pass
-        return grad_input  # must return the same or updated grad_input
-
-    model.register_full_backward_hook(submodule_backward_hook)
+    optimizer = Adam(
+        model.parameters(),
+        lr=1.0e-4,  # or whatever learning rate you need
+        betas=(0.9, 0.999),
+        eps=1e-8,
+        weight_decay=0.0,
+        amsgrad=False,
+    )
 
     with profile(
         activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
@@ -149,6 +148,8 @@ if __name__ == "__main__":
                     labels,
                 )
             loss.backward()
+            optimizer.step()  # applies the gradients to model parameters
+            optimizer.zero_grad()  # clears gradients for the next iteration
             torch.cuda.synchronize()
 
     print(prof.key_averages().table(sort_by="cuda_time_total"))
