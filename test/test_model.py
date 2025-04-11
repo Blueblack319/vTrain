@@ -142,11 +142,12 @@ if __name__ == "__main__":
             labels = torch.randint(
                 0, vocab_size, (batch_size, seq_length), device="cuda"
             ).view(-1)
-            print(logit.shape)
-            loss = _criterion(
-                logit,
-                labels,
-            )
+
+            with record_function("YJH_PROFILE_CrossEntropyLoss"):
+                loss = _criterion(
+                    logit,
+                    labels,
+                )
             loss.backward()
             torch.cuda.synchronize()
 

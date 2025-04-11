@@ -83,6 +83,8 @@ def collect_record_functions(log):
                 event["cat"] == "gpu_user_annotation" and "YJH_PROFILE" in event["name"]
             ):
                 fwd_results.append(event)
+    record_functions.sort(key=lambda x: x["ts"])
+    fwd_results.sort(key=lambda x: x["ts"])
     return record_functions, fwd_results
 
 
@@ -119,7 +121,7 @@ def collect_forward_cpu_ops(cpu_ops, record_function):
 
 def collect_backward_cpu_ops(cpu_ops, forward_cpu_ops):
     backward_cpu_ops = []
-    times = {"start": sys.float_info.max, "end": 0}
+    backward_cpu_times = {"start": sys.float_info.max, "end": 0}
     for forward_cpu_op in forward_cpu_ops:
         if "args" in forward_cpu_op and "Sequence number" in forward_cpu_op["args"]:
             seq_num = forward_cpu_op["args"]["Sequence number"]
@@ -145,16 +147,14 @@ def collect_backward_cpu_ops(cpu_ops, forward_cpu_ops):
             #     backward_cpu_ops.append(candidates[0])
             assert len(candidates) == 1 
             backward_cpu_ops = backward_cpu_ops + candidates
-            times["start"] = min(times["start"], candidates[0]["ts"])
-            times["end"] = max(times["end"], candidates[0]["ts"] + candidates[0]["dur"])
+            backward_cpu_times["start"] = min(backward_cpu_times["start"], candidates[0]["ts"])
+            backward_cpu_times["end"] = max(backward_cpu_times["end"], candidates[0]["ts"] + candidates[0]["dur"])
 
-    return times, backward_cpu_ops
+    return backward_cpu_times, backward_cpu_ops
 
 
-def collect_flow_events(times, flow_events):
-    collected_flow_events = []
-    start = times["start"]
-    end = times["end"]
+def collect_ac2g_events(start, end, flow_events):
+    collected_ac2g_events = []
     for event in flow_events:
         if (
             event["ph"] == "s"
@@ -162,14 +162,14 @@ def collect_flow_events(times, flow_events):
             and event["ts"] >= start
             and event["ts"] <= end
         ):
-            collected_flow_events.append(event)
-    return collected_flow_events
+            collected_ac2g_events.append(event)
+    return collected_ac2g_events
 
 
-def collect_kernel_events(collected_flow_events, kernel_events):
+def collect_kernel_events(collected_ac2g_events, kernel_events):
     kernel_times = {"start": sys.float_info.max, "end": 0}
     kernels_record_function = []
-    flow_event_ids = [event["id"] for event in collected_flow_events]
+    flow_event_ids = [event["id"] for event in collected_ac2g_events]
 
     for event in kernel_events:
         if "args" in event and event["args"]["correlation"] in flow_event_ids:
@@ -195,23 +195,85 @@ def test_main():
 
     # [x] Find the YJH_PROFILE events(record functions)
     record_functions, fwd_results = collect_record_functions(log_json["traceEvents"])
+    
+    ### Try to include AccumulateGrad ###
+
+    # [x] Collect backward_cpu_times including AccumulateGrad for all layers
+    results_train_step = []
+    for record_function in record_functions:
+        # Colloct all the forward cpu_op events in a YJH_PROFILE event
+        forward_cpu_ops = collect_forward_cpu_ops(cpu_ops, record_function)
+        # Find the corresponding backward cpu_op events using fwdbwd flow events
+        backward_cpu_times, backward_cpu_ops = collect_backward_cpu_ops(
+            cpu_ops, forward_cpu_ops
+        )
+        result = {"name": record_function["name"], "bwd_cpu_start": backward_cpu_times["start"], "bwd_cpu_end": backward_cpu_times["end"]}
+        results_train_step.append(result)
+    results_train_step.sort(key=lambda x: x["bwd_cpu_start"])
+
+    # for result in results_train_step:
+    #     print(result['name'])
+    #     print(f"Backward cpu_op duration: {(result['bwd_cpu_end'] - result['bwd_cpu_start']) / 1000:.3f} ms")
+    # return
+
+    # Extend the backward cpu_op time to include AccumulateGrad
+    for i in range(len(results_train_step)):
+        if "YJH_PROFILE_Embedding" != results_train_step[i]["name"]:
+            results_train_step[i]['bwd_cpu_end'] = results_train_step[i+1]['bwd_cpu_start']
+        else:
+            results_train_step[i]['bwd_cpu_end'] = results_train_step[i]['bwd_cpu_end'] + 80
+    
+    for result in results_train_step:
+        # Collect all the flow events with "ac2g"+"s"
+        collected_ac2g_events = collect_ac2g_events(result['bwd_cpu_start'], result['bwd_cpu_end'], flow_events)
+
+        # "ac2g" + "s" -> "correlation" -> "kernel" events
+        kernel_times, kernels_record_function = collect_kernel_events(
+            collected_ac2g_events, kernel_events
+        )
+        result['bwd_kernel_duration'] = kernel_times["end"] - kernel_times["start"]
+        result['bwd_kernel_start'] = kernel_times["start"]
+        result['bwd_kernel_end'] = kernel_times["end"]
+
+        # if "YJH_PROFILE_Transformer_Layer_0" in  record_function["name"]:
+        #     print(record_function["name"])
+        #     for fwd_result in fwd_results:
+        #         if (
+        #             fwd_result["name"] == record_function["name"]
+        #             and fwd_result["args"]["External id"]
+        #             == record_function["args"]["External id"]
+        #         ):
+        #             print(f"Forward duration: {fwd_result["dur"] / 1000:.3f} ms", )
+        #             break
+        #     back_dur = kernel_times["end"] - kernel_times["start"]
+        #     print(f"Backward duration: {back_dur / 1000:.3f} ms")
+        #     print("=======================================")
+    
+    # DEBUG
+    # results_train_step.sort(key=lambda x: x["bwd_kernel_start"])
+    for result in results_train_step:
+        if "CrossEntropy" in result['name']:
+            print(result['name'])
+            print(f"Kernel duration: {result['bwd_kernel_duration'] / 1000:.3f} ms")
+    
+    return
 
     # Test for all layers considering only forward and backward
     for idx, record_function in enumerate(record_functions):
-        # [x] Colloct all the forward cpu_op events in a YJH_PROFILE event
+        # Colloct all the forward cpu_op events in a YJH_PROFILE event
         forward_cpu_ops = collect_forward_cpu_ops(cpu_ops, record_function)
 
-        # [x] Find the corresponding backward cpu_op events using fwdbwd flow events
-        times, backward_cpu_ops = collect_backward_cpu_ops(
+        # Find the corresponding backward cpu_op events using fwdbwd flow events
+        backward_cpu_times, backward_cpu_ops = collect_backward_cpu_ops(
             cpu_ops, forward_cpu_ops
         )
 
-        # [x] Collect all the flow events with "ac2g"+"s"
-        collected_flow_events = collect_flow_events(times, flow_events)
+        # Collect all the flow events with "ac2g"+"s"
+        collected_ac2g_events = collect_ac2g_events(backward_cpu_times, flow_events)
 
-        # [x] "ac2g" + "s" -> "correlation" -> "kernel" events
+        # "ac2g" + "s" -> "correlation" -> "kernel" events
         kernel_times, kernels_record_function = collect_kernel_events(
-            collected_flow_events, kernel_events
+            collected_ac2g_events, kernel_events
         )
         if "YJH_PROFILE_Transformer_Layer_0" in  record_function["name"]:
             print(record_function["name"])
