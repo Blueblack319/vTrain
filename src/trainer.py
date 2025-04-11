@@ -106,8 +106,8 @@ class Trainer:
         # collect traces
         init_trace()
 
-        for _ in range(num_step):
-            self.train_step(model, inputs, labels, criterion, optimizer, profile=True)
+        # for _ in range(num_step):
+        self.train_step(model, inputs, labels, criterion, optimizer, profile=True)
 
         torch.cuda.synchronize()
         traces = finish_trace().strip().split("\n")

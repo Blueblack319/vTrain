@@ -20,6 +20,7 @@ from megatron.core.tensor_parallel.layers import (
 )
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.enums import AttnMaskType
+
 from tests.unit_tests.test_utilities import Utils
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
@@ -27,13 +28,13 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_decoder_block_spec,
     get_gpt_layer_local_spec,
     get_gpt_layer_with_transformer_engine_spec,
-    get_gpt_mtp_block_spec,
 )
 from vtrain_profiler import init_trace, timestamp, finish_trace
 from megatron.core.models.common.embeddings.language_model_embedding import (
     LanguageModelEmbedding,
 )
 from megatron.core import parallel_state
+from torch.profiler import profile, record_function, ProfilerActivity
 
 ###
 
@@ -214,15 +215,15 @@ class MCoreTransformerBlock(nn.Module):
     def forward(self, hidden_states: Tensor, attention_mask: Optional[Tensor]):
         for l_no, layer in enumerate(self.layers):
             torch.cuda.nvtx.range_push("Transformer Layer")
-            hidden_states = layer(hidden_states, attention_mask)
+            with record_function(f"YJH_PROFILE_Transformer_Layer_{l_no}"):
+                hidden_states = layer(hidden_states, attention_mask)
             torch.cuda.nvtx.range_pop()
         torch.cuda.nvtx.range_push("Final LayerNorm")
-        output = self.final_layernorm(hidden_states)
+        with record_function(f"YJH_PROFILE_Final_LayerNorm"):
+            output = self.final_layernorm(hidden_states)
         torch.cuda.nvtx.range_pop()
         return output
 
-
-class MCoreGPTModel(nn.Module):
     # def __init__(
     #     self,
     #     num_layers,
@@ -237,6 +238,17 @@ class MCoreGPTModel(nn.Module):
     #     checkpoint_activations=False,
     #     checkpoint_num_layers=1,
     # ):
+
+
+def backward_hook(module, grad_input, grad_output):
+    with record_function(f"Backward_{module.__class__.__name__}"):
+        # The hook does not define how backward is computed—
+        # it simply runs *after* this module’s backward pass has computed grad_input/grad_output.
+        pass
+    return None  # you typically return None if you're not altering grads
+
+
+class MCoreGPTModel(nn.Module):
     def __init__(
         self,
         config: TransformerConfig,
@@ -274,12 +286,14 @@ class MCoreGPTModel(nn.Module):
         # output layer
         self.output_layer = ColumnParallelLinear(
             input_size=self.hidden_size,
-            output_size=self.hidden_size,
+            output_size=vocab_size // world_size,
             init_method=config.init_method,
             bias=True,
             config=config,
             skip_bias_add=False,
         )
+        # Register the hook on the modules you want to profile
+        self.register_full_backward_hook(backward_hook)
 
     def forward(self, input_ids, position_ids=None, attention_mask=None):
         seq_length = self.max_sequence_length
@@ -298,24 +312,20 @@ class MCoreGPTModel(nn.Module):
 
         # Embeddings.
         torch.cuda.nvtx.range_push("Embedding")
-        timestamp("forward start embeddings")
-        hidden_states = self.embeddings(input_ids, position_ids)
-        timestamp("forward end embeddings")
+        with record_function("YJH_PROFILE_Embedding"):
+            hidden_states = self.embeddings(input_ids, position_ids)
         torch.cuda.nvtx.range_pop()
 
         # Transformer.
-        timestamp("forward start transformer")
         hidden_states = self.transformer(hidden_states, attention_mask)
-        timestamp("forward end transformer")
 
         if not self.post_process:
             return hidden_states
 
         # Logits
         torch.cuda.nvtx.range_push("Output Layer")
-        timestamp("forward start output_layer")
-        logits, _ = self.output_layer(hidden_states)
-        timestamp("forward end output_layer")
+        with record_function("YJH_PROFILE_Output_Layer"):
+            logits, _ = self.output_layer(hidden_states)
         torch.cuda.nvtx.range_pop()
         return logits
 
@@ -364,7 +374,7 @@ if __name__ == "__main__":
     output_layer = (
         ColumnParallelLinear(
             input_size=hidden_size,
-            output_size=hidden_size,
+            output_size=vocab_size // world_size,
             init_method=config.init_method,
             bias=True,
             config=config,

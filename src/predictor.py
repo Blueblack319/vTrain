@@ -8,13 +8,6 @@ from .graph import CommNode, DepGraph, LayerNode, TaskNode
 import os
 import logging
 
-# [ ] Using NeMo framework
-# from nemo.collections import llm
-# from nemo import lightning as nl
-# from megatron.core.optimizer import OptimizerConfig
-
-# from .model.mcore_gpt_model import MCoreGptModel
-
 
 logger = logging.getLogger()
 logging.basicConfig(
@@ -45,14 +38,14 @@ class vTrain:
 
         self.model = None
         self.model_params = {
-            "embedding": [
+            "embeddings": [
                 ParamInfo(
                     (config.vocab_size // config.tensor_parallel_size)
                     * config.hidden_size
                 ),  # word embed
                 ParamInfo(config.max_length * config.hidden_size),  # pos embed
             ],
-            "transformer_layer": [
+            "transformer": [
                 ParamInfo(config.hidden_size),  # layernorm
                 ParamInfo(config.hidden_size),  # layernorm
                 ParamInfo(
@@ -84,20 +77,17 @@ class vTrain:
                 ),  # down proj
                 ParamInfo(config.hidden_size),  # down proj bias
             ],
-            "output_layer": [
+            "logit": [
                 ParamInfo(
                     (config.vocab_size // config.tensor_parallel_size)
                     * config.hidden_size
-                )  # output_layer
+                )  # logit
             ],
         }
         self.layers = (
-            [("embedding", True)]  # embeddings -> embedding
-            + [
-                ("transformer_layer", True) for _ in range(config.num_layers)
-            ]  # transformer -> transformer_layer
-            + [("final_layernorm", True)]  # X -> final_layernorm
-            + [("output_layer", True)]  # logit -> output_layer
+            [("embeddings", True)]
+            + [("transformer", True) for _ in range(config.num_layers)]
+            + [("logit", True)]
         )
 
         self.cbid_table = None
@@ -128,11 +118,11 @@ class vTrain:
 
         return result, breakdown
 
-    def show_graph(self, filename):
+    def show_graph(self):
         if self.graph is None:
             logger.error(f"there is no simulated execution graph")
         else:
-            self.graph.show_graph(filename)
+            self.graph.show_graph()
 
     def create_model(self):
         config: vTrainConfig = self.config
@@ -148,11 +138,6 @@ class vTrain:
 
         return True
 
-    # [ ] Create MCoreGPTModel
-    def create_mcore_model(self):
-        pass
-
-    # [x] Passed
     def create_nodes(self):
         layers = self.layers
         ingredients = {"fwd": {}, "bwd": {}, "wu": {}}
@@ -190,7 +175,6 @@ class vTrain:
         latency_nano_sec = latency_sec * (10**9)
         return latency_nano_sec
 
-    # [x] Passed
     def create_layer_graph(self, ingredients):
         config = self.config
         graph = self.graph
@@ -213,7 +197,7 @@ class vTrain:
         # balance
         balance = [config.num_layers // pp for _ in range(pp)]
         balance[0] += 1  # embedding
-        balance[-1] += 1  # output_layer
+        balance[-1] += 1  # logit
         num_layers = sum(balance)
 
         layer_idx_by_rank = []
@@ -234,12 +218,9 @@ class vTrain:
             local_batch_size * config.max_length * config.hidden_size * data_size
         )
 
-        ######################################################
-        # YJH: Create nodes for 3D parallelism.
-        ######################################################
         # warmup phase
         num_warmup_microbatch_rank0 = min(pp - 1, num_microbatch)
-        for microbatch_idx in range(num_warmup_microbatch_rank0):  # YJH: 0 -> pp-2
+        for microbatch_idx in range(num_warmup_microbatch_rank0):
             for rank in range(pp - 1 - microbatch_idx):
                 for layer_idx in layer_idx_by_rank[rank]:
                     nodeInfo = ingredients["fwd"][layer_idx]
@@ -250,7 +231,7 @@ class vTrain:
                     nodes_by_microbatch[microbatch_idx].append(node)
 
                     # comm across mp
-                    if tp > 1 and nodeInfo[1] in ["encoder", "transformer_layer"]:
+                    if tp > 1 and nodeInfo[1] in ["encoder", "transformer"]:
                         self._add_tp_communication(
                             rank, tp, microbatch_idx, feature_map_size
                         )
@@ -265,18 +246,9 @@ class vTrain:
                 graph.streams[f"GPU{rank}"][-1].gap += pp_gap
 
         # 1F1B phase + cooldown phase
-        # YJH: (microbatch_idx, rank)
         for microbatch_idx in range(num_microbatch):
             for rank in range(pp - 1, -1, -1):
-                """YJH
-                fwd_microbatch_idx
-                (0, pp-1 -> 0), delay: 0 -> pp-1
-                (1, pp-1 -> 0), delay: 0 -> pp-1
-                (2, pp-1 -> 0), delay: 0 -> pp-1
-                ...
-                (microbatch_num-1, pp-1 -> 0), delay: 0 -> pp-1
-                """
-                fwd_microbatch_idx = (pp - rank - 1) + microbatch_idx
+                fwd_microbatch_idx = pp - rank - 1 + microbatch_idx
                 bwd_microbatch_idx = microbatch_idx
 
                 # Fwd nodes
@@ -290,7 +262,7 @@ class vTrain:
                         nodes_by_microbatch[fwd_microbatch_idx].append(node)
 
                         # comm across mp
-                        if tp > 1 and nodeInfo[1] in ["encoder", "transformer_layer"]:
+                        if tp > 1 and nodeInfo[1] in ["encoder", "transformer"]:
                             self._add_tp_communication(
                                 rank, tp, fwd_microbatch_idx, feature_map_size
                             )
@@ -334,7 +306,7 @@ class vTrain:
                     nodes_by_microbatch[bwd_microbatch_idx].append(node)
 
                     # comm across mp
-                    if tp > 1 and nodeInfo[1] in ["encoder", "transformer_layer"]:
+                    if tp > 1 and nodeInfo[1] in ["encoder", "transformer"]:
                         self._add_tp_communication(
                             rank, tp, bwd_microbatch_idx, feature_map_size
                         )
@@ -363,17 +335,14 @@ class vTrain:
                 last_bwd = [self.graph.streams["GPU0"][-1]]
             else:
                 last_bwd = []
-            """ YJH
-            Assume the previous bucket communications are completely overlapped with computation.
-            Create comm nodes for each PP stage.
-            """
+
             for rank in range(pp):
                 comm_node = CommNode(param_size_by_rank[rank], "Comm")
                 if tp < config.node_size:  # intra-node grad allreduce for dp
                     comm_node.duration = self.compute_comm_time(
                         comm_node.bucket_size, dp
                     )
-                else:  # inter-node grad allreduce
+                else:
                     comm_node.duration = (
                         comm_node.bucket_size
                         / (config.inter_node_bandwidth * (2**30) / 8)
@@ -395,17 +364,14 @@ class vTrain:
 
                 for u in last_nodes:
                     u.add_dependency(node)
-        ######################################################
 
         # add dependencies between nodes
         for stream, nodes in graph.streams.items():
             if stream == "Comm":
                 continue
-            # YJH: Add dependency for Comp streams
             for i in range(len(nodes) - 1):
                 nodes[i].add_dependency(nodes[i + 1])
 
-        # YJH: Add dependency in terms of micro-batch
         for nodes in nodes_by_microbatch:
             for i in range(len(nodes) - 1):
                 nodes[i].add_dependency(nodes[i + 1])
@@ -431,9 +397,6 @@ class vTrain:
             with open(log_filename, "r") as f:
                 traces = f.readlines()
         else:
-            # [ ] Create MCoreGPTModel
-            # self.create_mcore_model()
-
             # create model and collect traces
             self.create_model()
             trainer = Trainer(config, self.model)
@@ -441,29 +404,18 @@ class vTrain:
 
         # parse traces
         kernel_dict = self.parse_traces(traces)
-        # DEBUG
-        # print("kernel_dict")
-        # for k, v in kernel_dict.items():
-        #     print(k)
-        #     print(v)
 
         return kernel_dict
 
     def predict(self, kernel_dict):
         graph = self.graph
 
-        ######################################################
-        # YJH: Operator-granularity -> Task-granularity
-        ######################################################
         # rebuild graph
         for stream, layer_nodes in graph.streams.items():
             # Replace a layer node with a sequence of task nodes
             # (layer node) ==> (task node)-(task node)-...-(task node)
-            # e.g., Stream0: Fwd_embeddings-Fwd_transformer-...-Fwd_logit
-            # e.g., Fwd_0 ==> kernel_0-1-2-3
             new_nodes = []
             for idx, layer_node in enumerate(layer_nodes):
-                # e.g., layer_node.function can be Fwd_embeddings or Fwd_transformer or Fwd_logit or ...
                 nodeInfo = kernel_dict.get(layer_node.function, [])
                 if len(nodeInfo) == 0:
                     new_nodes.append(layer_node)
@@ -479,11 +431,8 @@ class vTrain:
                 # replace nodes
                 self.replace_node(layer_node, idx, task_nodes)
                 new_nodes += task_nodes
-                # DEBUG
-                # print(stream, len(new_nodes))
 
             graph.streams[stream] = new_nodes
-        ######################################################
 
         # prediction (Algorithm 1 in paper)
         num_nodes = 0
@@ -559,13 +508,13 @@ class vTrain:
             type = info[2]
             if type == "TIMESTAMP":
                 msg = info[-1].strip('"')
-                layer_name = msg.strip().split()[-1]
+                layer_num = msg.strip().split()[-1]
                 if "forward start" in msg:
-                    func = f"Fwd_{layer_name}"
+                    func = f"Fwd_{layer_num}"
                 elif "backward start" in msg:
-                    func = f"Bwd_{layer_name}"
+                    func = f"Bwd_{layer_num}"
                 elif "WU start" in msg:
-                    func = f"WU_{layer_name}"
+                    func = f"WU_{layer_num}"
                 elif "end" in msg:
                     func = "NONE"
 
@@ -582,7 +531,6 @@ class vTrain:
                 cid = int(info[-1])
 
                 if prevFunc and func2node[prevFunc]:
-                    # Fill the gap
                     prev_task = func2node[prevFunc][-1]
                     func2node[prevFunc][-1] = prev_task[:-1] + (
                         start - prev_task[-2] - prev_task[0],

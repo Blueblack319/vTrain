@@ -55,31 +55,32 @@ class GPTModelCallback(Callback):
 
         # assign pre-/post-hooks for forward and backward functions
         def forward_with_info(self, *args, **kwargs):
-            torch.cuda.synchronize()
-            timestamp(f"forward start {self.name}")
-            ret = self.forward_(*args, **kwargs)
-            torch.cuda.synchronize()
-            timestamp(f"forward end {self.name}")
+            # torch.cuda.synchronize()
+            # timestamp(f"forward start {self.name}")
+            with record_function(f"Forward__{self.name}"):
+                ret = self.forward_(*args, **kwargs)
+            # torch.cuda.synchronize()
+            # timestamp(f"forward end {self.name}")
 
-            name = self.name
+            # name = self.name
 
-            def backward_pre_hook(self, *args):
-                torch.cuda.synchronize()
-                timestamp(f"backward start {name}")
-                print(f"backward start {name}")
+            # def backward_pre_hook(self, *args):
+            #     torch.cuda.synchronize()
+            #     timestamp(f"backward start {name}")
+            #     print(f"backward start {name}")
 
-            def backward_hook(self, *args):
-                torch.cuda.synchronize()
-                timestamp(f"backward end {name}")
-                print(f"backward end {name}")
+            # def backward_hook(self, *args):
+            #     torch.cuda.synchronize()
+            #     timestamp(f"backward end {name}")
+            #     print(f"backward end {name}")
 
-            # register backward prehook to the corresponding backward function
-            if isinstance(ret, tuple):
-                ret[0].grad_fn.register_prehook(backward_pre_hook)
-                ret[0].grad_fn.register_hook(backward_hook)
-            else:
-                ret.grad_fn.register_prehook(backward_pre_hook)
-                ret.grad_fn.register_hook(backward_hook)
+            # # register backward prehook to the corresponding backward function
+            # if isinstance(ret, tuple):
+            #     ret[0].grad_fn.register_prehook(backward_pre_hook)
+            #     ret[0].grad_fn.register_hook(backward_hook)
+            # else:
+            #     ret.grad_fn.register_prehook(backward_pre_hook)
+            #     ret.grad_fn.register_hook(backward_hook)
             return ret
 
         def backward_hook(self, *args):
@@ -201,7 +202,7 @@ if __name__ == "__main__":
         callbacks=[
             IterationDurationCallback(),
             # NsysCallback(start_step=2, end_step=100, ranks=[0], gen_shape=False),
-            gpt_callback,
+            # gpt_callback,
         ],
     )
 
@@ -221,7 +222,13 @@ if __name__ == "__main__":
     # with profile(
     #     on_trace_ready=torch.profiler.tensorboard_trace_handler("./log/filename")
     # ) as p:
-
+    # with profile(
+    #     activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+    #     record_shapes=True,
+    #     on_trace_ready=torch.profiler.tensorboard_trace_handler(
+    #         "./tb_logs/profiler_test_nemo_gpt"
+    #     ),
+    # ) as prof:
     llm.train(
         model=model,
         data=data,
@@ -232,6 +239,6 @@ if __name__ == "__main__":
     )
     # logger.info(f"number of traces collected: {len(gpt_callback.traces)}")
 
-    log_filename.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_filename, "w") as f:
-        f.write("\n".join(gpt_callback.traces))
+    # log_filename.parent.mkdir(parents=True, exist_ok=True)
+    # with open(log_filename, "w") as f:
+    #     f.write("\n".join(gpt_callback.traces))

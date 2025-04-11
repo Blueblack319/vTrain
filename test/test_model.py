@@ -10,6 +10,9 @@ from src.model.fused_adam import FusedAdam as Adam
 from vtrain_profiler import init_trace, timestamp, finish_trace
 from pathlib import Path
 
+# PyTorch Profiler
+from torch.profiler import profile, record_function, ProfilerActivity
+
 os.environ["WORLD_SIZE"] = "1"
 os.environ["RANK"] = "0"
 os.environ["LOCAL_RANK"] = "0"
@@ -112,22 +115,52 @@ if __name__ == "__main__":
     #         module.name = name
     #         modify_functions(module)
 
-    for batch_idx in range(5):
-        # _ = model(
-        #     tokens, position_ids, attention_mask, labels=labels, loss_mask=loss_mask
-        # )
-        _ = model(input_ids, position_ids, attention_mask)
-    torch.cuda.synchronize()
+    _criterion = torch.nn.CrossEntropyLoss().cuda()
 
-    init_trace()
-    _ = model(input_ids, position_ids, attention_mask)
-    torch.cuda.synchronize()
-    traces = finish_trace().strip().split("\n")
+    def submodule_backward_hook(module, grad_input, grad_output):
+        # This code runs as part of the backward pass. We can add a record_function scope here:
+        with record_function(f"Backward_{module._get_name()}"):
+            # We do not change anything with gradients here; we're just labeling.
+            pass
+        return grad_input  # must return the same or updated grad_input
 
-    log_filename = Path(f"test/logs/trace/trace_last")
-    log_filename.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_filename, "w") as f:
-        f.write("\n".join(traces))
+    model.register_full_backward_hook(submodule_backward_hook)
+
+    with profile(
+        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+        record_shapes=True,
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(
+            "./test/profiler_logs/profiler_test_model"
+        ),
+    ) as prof:
+        for batch_idx in range(5):
+            # _ = model(
+            #     tokens, position_ids, attention_mask, labels=labels, loss_mask=loss_mask
+            # )
+            logit = model(input_ids, position_ids, attention_mask)
+            logit = logit.view(-1, vocab_size)
+            labels = torch.randint(
+                0, vocab_size, (batch_size, seq_length), device="cuda"
+            ).view(-1)
+            print(logit.shape)
+            loss = _criterion(
+                logit,
+                labels,
+            )
+            loss.backward()
+            torch.cuda.synchronize()
+
+    print(prof.key_averages().table(sort_by="cuda_time_total"))
+
+    # init_trace()
+    # _ = model(input_ids, position_ids, attention_mask)
+    # torch.cuda.synchronize()
+    # traces = finish_trace().strip().split("\n")
+
+    # log_filename = Path(f"test/logs/trace/trace_last")
+    # log_filename.parent.mkdir(parents=True, exist_ok=True)
+    # with open(log_filename, "w") as f:
+    #     f.write("\n".join(traces))
 
     # for _ in range(10):
     #     _ = model(input_ids, position_ids, attention_mask)
